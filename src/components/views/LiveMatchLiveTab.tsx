@@ -1484,7 +1484,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
     try {
       setSaving(true);
       await LiveMatchService.updateLiveStatus(matchId, {
-        currentBall: parseInt(currentBall) || 0,
+        currentBall: currentBall,
         currentInning: parseInt(currentInning),
       });
       toast.success('Current ball updated');
@@ -1758,7 +1758,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
 
       // Update live status with current ball
       await LiveMatchService.updateLiveStatus(matchId, {
-        currentBall: parseInt(currentBall) || 0,
+        currentBall: currentBall,
         currentInning: parseInt(currentInning),
       });
 
@@ -1822,7 +1822,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
       await LiveMatchService.updateLiveStatus(matchId, {
         currentInning: 1,
         currentOver: 0,
-        currentBall: 0,
+        currentBall: "0",
         // Teams are NOT set automatically - user must set them manually
         score: '0/0',
         overs: '0.0',
@@ -1938,10 +1938,10 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
       {/* Top Controls Bar */}
       <div className="flex flex-col gap-2 p-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm text-sm">
         {/* Calculation Mode Toggle */}
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-1">
           <Label className="text-xs font-semibold">Calculation Mode:</Label>
           <Select value={calculationMode} onValueChange={(value: 'auto' | 'manual') => setCalculationMode(value)}>
-            <SelectTrigger className="w-32 h-8">
+            <SelectTrigger className="w-32 !h-[10px] text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1951,12 +1951,12 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
           </Select>
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2 mr-4">
+              <Label htmlFor="auto-refresh" className="text-sm cursor-pointer">Auto Refresh</Label>
               <Checkbox
                 id="auto-refresh"
                 checked={autoRefresh}
                 onCheckedChange={(checked: boolean | string) => setAutoRefresh(checked === true)}
               />
-              <Label htmlFor="auto-refresh" className="text-sm cursor-pointer">Auto Refresh</Label>
             </div>
             {matchStatus === 'live' && !loading && !saving && (
               <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700 mr-2">
@@ -1967,8 +1967,8 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
                 <span className="text-xs font-medium text-green-700 dark:text-green-300">⌨️ Keyboard Scoring</span>
               </div>
             )}
-            <Button variant="outline" size="sm" onClick={loadLiveData} disabled={loading}>
-              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            <Button variant="outline" size="xs" className="text-xs" onClick={loadLiveData} disabled={loading}>
+              <RefreshCw className={`!w-3 !h-3 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
           </div>
@@ -1981,7 +1981,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
               <span className="font-bold text-slate-700 dark:text-slate-300 w-10">Toss:</span>
               <div className="flex-1 min-w-0">
                 <Select value={tossInfo} onValueChange={(value) => setTossInfo(value)}>
-                  <SelectTrigger className="h-8 w-full">
+                  <SelectTrigger className="!h-[10px] w-full">
                     <SelectValue placeholder="Select Toss" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1994,11 +1994,11 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Input value={tossInfo} onChange={(e) => setTossInfo(e.target.value)} className="h-8 flex-1 min-w-0" />
+              <Input value={tossInfo} onChange={(e) => setTossInfo(e.target.value)} className="!h-[20px] flex-1 min-w-0" />
               <Button
-                size="sm"
+                size="xs"
                 variant="outline"
-                className="h-8 bg-slate-100 hover:bg-slate-200 text-slate-700 whitespace-nowrap"
+                className="!h-[20px] !text-xs !w-[50px] bg-slate-100 hover:bg-slate-200 text-slate-700 whitespace-nowrap"
                 onClick={handleUpdateToss}
                 disabled={saving}
               >
@@ -2013,7 +2013,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
             {/* match status and innings */}
             <div className="flex items-center gap-2 w-full">
               <Select value={matchStatus} onValueChange={handleMatchStatusChange}>
-                <SelectTrigger className="w-[100px] h-8">
+                <SelectTrigger className="w-[100px] !h-[10px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -2027,7 +2027,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
               <div className="flex items-center gap-1">
                 <Label className="whitespace-nowrap">Inn:</Label>
                 <Select value={currentInning} onValueChange={handleInningChange}>
-                  <SelectTrigger className="w-[100px] h-8">
+                  <SelectTrigger className="w-[100px] !h-[10px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -2046,7 +2046,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
 
             {/* power play and odds history */}
             <div className="flex items-center gap-2 w-full flex-wrap">
-              <Button size="sm" className={`h-6 px-4 w-40 rounded-full ${powerPlayOn ? "bg-green-700 hover:bg-green-800" : "bg-red-700 hover:bg-red-800"}`} onClick={togglePowerPlay}>
+              <Button size="xs" className={`!h-[20px] !text-xs !w-[100px] rounded-full ${powerPlayOn ? "bg-green-700 hover:bg-green-800" : "bg-red-700 hover:bg-red-800"}`} onClick={togglePowerPlay}>
                 {powerPlayOn ? "Power Play On" : "Power Play Off"}
               </Button>
 
@@ -2084,7 +2084,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
 
             {/* showing and dls buttons */}
             <div className="flex items-center gap-2 w-full justify-end">
-              <Button size="sm" className={`h-6 px-6 w-32 rounded-full ${showing ? "bg-green-700 hover:bg-green-800" : "bg-red-700 hover:bg-red-800"}`} onClick={() => updateControlState('isNotShowing', !showing, 'Not Showing', setShowing)}>
+              <Button size="xs" className={`!h-[20px] !text-xs !w-[100px] rounded-full ${showing ? "bg-green-700 hover:bg-green-800" : "bg-red-700 hover:bg-red-800"}`} onClick={() => updateControlState('isNotShowing', !showing, 'Not Showing', setShowing)}>
                 {showing ? "Showing" : "Not Showing"}
               </Button>
 
@@ -2095,7 +2095,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
 
             {/* commentory cont */}
             <div className="flex items-center gap-2 w-full justify-end">
-              <div className="flex items-center gap-1 border px-2 py-0.5 rounded text-xs bg-slate-50">
+              <div className="flex items-center gap-1 border !px-[10px] !py-[5px] rounded text-xs bg-slate-50">
                 <span className="text-slate-600">No Commentary</span>
                 <Checkbox
                   checked={noCommentry}
@@ -2104,7 +2104,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
                 />
               </div>
 
-              <div className="flex items-center gap-1 border px-2 py-0.5 rounded text-xs bg-slate-50">
+              <div className="flex items-center gap-1 border !px-[10px] !py-[5px] rounded text-xs bg-slate-50">
                 <span>On OC</span>
                 <Checkbox
                   checked={onOC}

@@ -21,6 +21,7 @@ import {
   Users,
   Wifi,
 } from "lucide-react";
+import React from "react";
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -769,7 +770,7 @@ export function LiveMatchView() {
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-hidden p-6 relative">
+      <div className="flex-1 overflow-hidden p-1 relative">
         <div className="max-w-[1600px] mx-auto h-full flex flex-col">
           <Tabs
             value={activeTab}

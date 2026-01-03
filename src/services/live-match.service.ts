@@ -32,7 +32,7 @@ export interface LiveMatchStatus {
 export interface UpdateLiveStatusDto {
   currentInning?: number;
   currentOver?: number;
-  currentBall?: number;
+  currentBall?: string;
   battingTeamId?: string;
   bowlingTeamId?: string;
   score?: string;
