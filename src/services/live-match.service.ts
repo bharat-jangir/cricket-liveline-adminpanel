@@ -27,6 +27,11 @@ export interface LiveMatchStatus {
   lambiRed?: number;
   lastUpdated: Date;
   lastBallTimestamp: Date;
+  comment2?: string;
+  comment3?: string;
+  currentStrikerId?: string | null;
+  currentNonStrikerId?: string | null;
+  currentBowlerId?: string | null;
 }
 
 export interface UpdateLiveStatusDto {
@@ -478,6 +483,36 @@ export class LiveMatchService {
   }
 
   /**
+   * Handle Simple Event - Process simple string-based scoring events
+   * 
+   * This method accepts simple string events and converts them to appropriate
+   * scoring events on the backend. The backend will parse the string and
+   * determine the event type and parameters automatically.
+   * 
+   * Supported event strings:
+   * - '1', '2', '3', '4', '5', '6' - Runs
+   * - 'lb1', 'lb2', 'lb3', 'lb4' - Leg byes
+   * - 'nb' - No ball
+   * - 'fh' - Free hit
+   * - 'uf' - Umpires fall
+   * - 'ba' - Ball in air
+   * - 'o' - Over
+   * - 'roc' - Run out check
+   * - 'w' - Wicket
+   * - 'wd' - Wide ball
+   * - 'wdnb' - Wide + No ball
+   * - 'bs' - Bowler stopped
+   * 
+   * @param matchId - The ID of the match
+   * @param eventString - Simple string representing the event
+   * @returns Promise with the updated live status
+   */
+  static async handleSimpleEvent(matchId: string, eventString: string): Promise<any> {
+    const response = await axiosInstance.post(`/admin/matches/${matchId}/simple-event`, { event: eventString });
+    return response.data?.data?.result;
+  }
+
+  /**
    * Set a batsman as striker (on strike)
    * 
    * This will automatically set all other batsmen in the same inning to non-striker.
@@ -518,6 +553,31 @@ export class LiveMatchService {
   static async swapBatsmen(matchId: string, inningNumber: number): Promise<any> {
     const response = await axiosInstance.post(`/admin/matches/${matchId}/swap-batsmen/${inningNumber}`);
     return response.data?.data?.result;
+  }
+
+  /**
+   * Get recent overs for admin panel (last 3 overs with ball details)
+   * 
+   * This optimized API returns only the most recent 3 overs for the current or specified inning,
+   * providing ball-by-ball details for editing and management purposes.
+   * 
+   * @param matchId - The ID of the match
+   * @param inningNumber - Optional inning number (defaults to current inning)
+   * @returns Promise with recent overs data including current over number and overs array
+   */
+  static async getRecentOvers(matchId: string, inningNumber?: number): Promise<any> {
+    try {
+      const params = inningNumber ? `?inningNumber=${inningNumber}` : '';
+      const response = await axiosInstance.get(`/admin/matches/${matchId}/recent-overs${params}`);
+      if (response.data?.status === false) {
+        console.warn('Recent overs API returned error:', response.data);
+        return { inningNumber: inningNumber || 1, currentOver: 1, overs: [] };
+      }
+      return response.data?.data?.result || response.data?.result || { inningNumber: inningNumber || 1, currentOver: 1, overs: [] };
+    } catch (error: any) {
+      console.error('Error fetching recent overs:', error);
+      return { inningNumber: inningNumber || 1, currentOver: 1, overs: [] };
+    }
   }
 
   /**

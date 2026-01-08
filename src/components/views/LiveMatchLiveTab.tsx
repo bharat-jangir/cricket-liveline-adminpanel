@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { toast } from "sonner";
 import { LiveMatchService, type LiveMatchStatus, type Scorecard, type BattingScorecard, type BowlingScorecard, type UpdateBatsmanDto, type UpdateBowlerDto, type UpdateTossDto, type Inning } from "../../services/live-match.service";
 import { MatchService } from "../../services/match.service";
-import { useKeyboardScore } from "../../hooks/useKeyboardScore";
+import { useSimpleKeyboardScore } from "../../hooks/useSimpleKeyboardScore";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
@@ -32,7 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
-import { MoreVertical, RefreshCw, Plus } from "lucide-react";
+import { MoreVertical, RefreshCw, Plus, Save } from "lucide-react";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import {
   Dialog,
@@ -195,34 +195,32 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
   const originalValuesRef = useRef<Map<string, string>>(new Map());
 
   /**
-   * Keyboard Scoring Integration
+   * Simple Keyboard Scoring Integration
    * 
-   * This hook enables real-time keyboard-based scoring. All scoring events are dispatched
-   * to the backend score engine which handles the business logic.
+   * This hook enables real-time keyboard-based scoring using simple string events.
+   * The backend automatically determines event types and parameters from the string.
    * 
    * Features:
-   * - Press 0-6 to score runs
+   * - Press 1-6 to score runs
    * - Press 'W' for wicket
-   * - Press 'U' to undo last ball
    * - Press 'N' for no ball
    * - Press 'D' for wide
-   * - Press 'B' for bye
-   * - Press 'L' for leg bye
    * - Press 'O' to end over
+   * - Press 'B' for bowler stopped
    * 
    * The hook is only active when matchStatus is 'live' to prevent accidental scoring
    * during match setup or after completion.
    */
-  const { dispatchEvent: dispatchScoreEvent } = useKeyboardScore({
+  const { dispatchEvent: dispatchScoreEvent } = useSimpleKeyboardScore({
     matchId,
     enabled: matchStatus === 'live' && !loading && !saving,
-    onSuccess: async (event, response) => {
-      console.log('Score event processed successfully:', event, response);
+    onSuccess: async (eventString, response) => {
+      console.log('Simple score event processed successfully:', eventString, response);
       // Silently refresh data to update UI with latest state from backend
       await loadLiveData(true);
     },
-    onError: (event, error) => {
-      console.error('Failed to process score event:', event, error);
+    onError: (eventString, error) => {
+      console.error('Failed to process simple score event:', eventString, error);
       // Error toast is already shown by the hook
     },
     showToasts: true,
@@ -556,21 +554,21 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
     }
   }, [matchId, currentInning, getTeamNameFromId, getTeamIdString, currentBattingTeam, currentBowlingTeamId]);
 
-  // Load over history from database
+  // Load over history from database using recent overs API
   const loadOverHistory = useCallback(async () => {
     if (!matchId) return;
     try {
-      const overSummaries = await LiveMatchService.getOverSummaries(matchId, parseInt(currentInning));
+      const recentOversData = await LiveMatchService.getRecentOvers(matchId, parseInt(currentInning));
 
-      // Transform over summaries to overHistory format
-      const transformedHistory = overSummaries.map((over: any) => ({
+      // Transform recent overs to overHistory format
+      const transformedHistory = recentOversData.overs.map((over: any) => ({
         over: over.overNumber,
         runs: over.ballsData || [],
       })).sort((a: any, b: any) => b.over - a.over); // Sort descending
 
       setOverHistory(transformedHistory);
     } catch (error: any) {
-      console.error('Failed to load over history:', error);
+      console.error('Failed to load recent overs:', error);
       // Don't show error toast, just log it
     }
   }, [matchId, currentInning]);
@@ -1113,7 +1111,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
   const handleBowlerSelect = useCallback(async (bowlerId: number) => {
     const bowler = bowlers.find(b => b.id === bowlerId);
     if (!bowler || !bowler.inScorecard) return;
-    
+
     try {
       setSaving(true);
       await LiveMatchService.setCurrentBowler(matchId, parseInt(currentInning), bowler._playerId);
@@ -1478,20 +1476,34 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
     }
   };
 
-  // Update current ball
-  const handleUpdateCurrentBall = async () => {
+  // Update Comment 2
+  const handleUpdateComment2 = async () => {
     if (!matchId) return;
     try {
       setSaving(true);
-      await LiveMatchService.updateLiveStatus(matchId, {
-        currentBall: currentBall,
-        currentInning: parseInt(currentInning),
-      });
-      toast.success('Current ball updated');
+      await LiveMatchService.updateLiveStatus(matchId, { comment2: comment2 });
+      toast.success('Comment updated successfully');
       await loadLiveData(true);
     } catch (error: any) {
-      console.error('Failed to update current ball:', error);
-      toast.error(error.response?.data?.userMessage || 'Failed to update current ball');
+      console.error('Failed to update comment:', error);
+      toast.error(error.response?.data?.userMessage || 'Failed to update comment');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Update current ball using simple event system
+  const handleUpdateCurrentBall = async () => {
+    if (!matchId || !currentBall) return;
+    try {
+      setSaving(true);
+      // Use the simple event system instead of direct API call
+      await LiveMatchService.handleSimpleEvent(matchId, currentBall);
+      toast.success('Event processed successfully');
+      await loadLiveData(true);
+    } catch (error: any) {
+      console.error('Failed to process event:', error);
+      toast.error(error.response?.data?.userMessage || 'Failed to process event');
     } finally {
       setSaving(false);
     }
@@ -1702,20 +1714,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
     }
   };
 
-  // Update comment 2
-  const handleUpdateComment2 = async () => {
-    if (!matchId) return;
-    try {
-      setSaving(true);
-      await LiveMatchService.updateLiveStatus(matchId, { comment2 });
-      toast.success('Comment 2 updated');
-    } catch (error: any) {
-      console.error('Failed to update comment 2:', error);
-      toast.error('Failed to update comment 2');
-    } finally {
-      setSaving(false);
-    }
-  };
+
 
   // Update comment SV3/SV4
   const handleUpdateCommentSV3SV4 = async () => {
@@ -1932,6 +1931,61 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
       </div>
     );
   }
+
+  // Helper to format ball display text
+  const getBallDisplay = (ball: any) => {
+    // Handle string/number inputs (legacy/simple format)
+    if (typeof ball !== 'object') return String(ball);
+
+    // If it has explicit label/display text, use it
+    if (ball.label) return ball.label;
+    if (ball.display) return ball.display;
+
+    // Check specific types from backend
+    const type = ball.type || ball.eventType;
+
+    if (type === 'WICKET' || ball.isWicket) return 'W';
+    if (type === 'WIDE' || ball.isWide) return 'wd';
+    if (type === 'NO_BALL' || ball.isNoBall) return 'nb';
+    if (type === 'LEG_BYE' || ball.isLegBye) return `lb${ball.runs || ''}`;
+    if (type === 'BYE') return `b${ball.runs || ''}`;
+
+    // Default runs fallback
+    if (ball.runs !== undefined) return String(ball.runs);
+
+    // Fallback for unknown objects
+    return '?';
+  };
+
+  // Helper to get ball style class
+  const getBallColorClass = (ball: any) => {
+    // Default inactive color
+    const defaultColor = 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300';
+
+    // Check if ball is string/number
+    if (typeof ball !== 'object') {
+      const val = String(ball);
+      if (val === '4') return 'bg-orange-500 text-white';
+      if (val === '6') return 'bg-green-600 text-white';
+      if (val === 'w' || val === 'W') return 'bg-red-600 text-white';
+      return defaultColor;
+    }
+
+    const type = ball.type || ball.eventType;
+    const runs = ball.runs || 0;
+    const isBoundary = ball.isBoundary;
+
+    // Wicket - Red
+    if (type === 'WICKET' || ball.isWicket) return 'bg-red-600 text-white';
+
+    // Six - Green
+    if (runs === 6 || (type === 'RUN' && runs === 6)) return 'bg-green-600 text-white';
+
+    // Four - Orange
+    if (runs === 4 || (type === 'RUN' && runs === 4)) return 'bg-orange-500 text-white';
+
+    return defaultColor;
+  };
 
   return (
     <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950 overflow-auto">
@@ -2322,75 +2376,58 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
         </div>
 
         {/* Row 4: This Over History */}
-        {/* Row 4: This Over History */}
+        {/* Row 4: Recent Overs History */}
         <div className="flex flex-col gap-2 mt-2 border-t pt-2 w-full">
-          <div className="flex items-center gap-2 w-full">
-            <div className="flex items-center gap-2 mx-4">
-              <span className="font-bold text-sm text-nowrap">This Over:</span>
-              <Input
-                className="w-8 h-8 rounded-full bg-red-900 text-white flex items-center justify-center text-xs font-bold text-center p-0 border-none focus:ring-1 focus:ring-red-500"
-                value={currentBall}
-                onChange={(e) => setCurrentBall(e.target.value)}
-              />
-              <div className="flex items-center gap-1">
-                {thisOver.map((val, index) => (
-                  <input
-                    key={index}
-                    className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-700 dark:text-slate-300 transition-colors text-center focus:outline-none focus:ring-1 focus:ring-slate-400"
-                    value={val}
-                    onChange={(e) => handleThisOverChange(index, e.target.value)}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* History Blocks */}
-            <div className="flex-1 flex gap-1 overflow-x-auto w-full">
-              {overHistory.map((overData, overIndex) => (
-                <div key={overIndex} className="flex gap-1 border border-slate-300 dark:border-slate-600 rounded px-1 bg-slate-50 dark:bg-slate-900 flex-1 min-w-0">
-                  <input
-                    className="w-8 border-r border-slate-300 dark:border-slate-600 pr-1 mr-1 text-xs font-bold text-slate-500 dark:text-slate-400 bg-transparent text-center focus:outline-none"
-                    value={overData.over}
-                    onChange={(e) => handleOverNumberChange(overIndex, e.target.value)}
-                  />
-                  <div className="flex gap-1 flex-1 ">
-                    {overData.runs.map((run, ballIndex) => (
-                      <input
-                        key={ballIndex}
-                        className={`w-6 h-6 rounded-full text-white text-[10px] font-bold text-center focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer ${activeBall?.overIndex === overIndex && activeBall?.ballIndex === ballIndex ? 'bg-red-700 ring-2 ring-red-400' : 'bg-red-900'}`}
-                        value={run}
-                        onChange={(e) => handleOverRunChange(overIndex, ballIndex, e.target.value)}
-                        onClick={() => setActiveBall({ overIndex, ballIndex })}
-                        onFocus={() => setActiveBall({ overIndex, ballIndex })}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="flex items-center justify-between mx-1">
+            <span className="font-bold text-sm text-slate-700 dark:text-slate-300">Recent Overs</span>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 text-xs text-blue-600 hover:text-blue-700"
+              onClick={loadOverHistory}
+              title="Refresh Overs"
+            >
+              <RefreshCw className="h-3 w-3 mr-1" /> Refresh
+            </Button>
           </div>
 
-          {/* Update/Cancel Buttons */}
-          <div className="flex gap-2 justify-center">
-            <Button
-              size="sm"
-              className="h-7 w-40 bg-gray-600 hover:bg-gray-700"
-              onClick={handleUpdateThisOver}
-              disabled={saving}
-            >
-              {saving ? 'Updating...' : 'Update'}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7"
-              onClick={() => {
-                setThisOver(["0", "0", "0", "0", "0", "0"]);
-                setCurrentBall("1");
-              }}
-            >
-              Reset
-            </Button>
+          <div className="flex gap-2 overflow-x-auto w-full pb-2 px-1">
+            {overHistory.map((overData, overIndex) => (
+              <div key={overIndex} className="flex gap-1 items-center border border-slate-300 dark:border-slate-600 rounded px-2 py-1 bg-slate-50 dark:bg-slate-900 min-w-fit shadow-sm">
+                <input
+                  className="w-8 border-r border-slate-300 dark:border-slate-600 pr-1 mr-1 text-xs font-bold text-slate-500 dark:text-slate-400 bg-transparent text-center focus:outline-none"
+                  value={overData.over}
+                  onChange={(e) => handleOverNumberChange(overIndex, e.target.value)}
+                  placeholder="#"
+                />
+                <div className="flex gap-1">
+                  {overData.runs.map((run, ballIndex) => (
+                    <input
+                      key={ballIndex}
+                      className={`w-6 h-6 rounded-full text-[10px] font-bold text-center focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer transition-transform hover:scale-110 ${activeBall?.overIndex === overIndex && activeBall?.ballIndex === ballIndex ? 'ring-2 ring-red-400 scale-110' : ''} ${getBallColorClass(run)}`}
+                      value={getBallDisplay(run)}
+                      onChange={(e) => handleOverRunChange(overIndex, ballIndex, e.target.value)}
+                      onClick={() => setActiveBall({ overIndex, ballIndex })}
+                      onFocus={() => setActiveBall({ overIndex, ballIndex })}
+                    />
+                  ))}
+                </div>
+                <div className="border-l border-slate-300 dark:border-slate-600 pl-1 ml-1 flex items-center">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-full"
+                    onClick={() => handleSaveOverHistory(overIndex)}
+                    title="Save Over"
+                  >
+                    <Save className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {overHistory.length === 0 && (
+              <div className="text-xs text-slate-500 italic p-2">No recent overs data</div>
+            )}
           </div>
         </div>
 
@@ -2418,7 +2455,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
                 onClick={handleUpdateCurrentBall}
                 disabled={saving || !currentBattingTeamId}
               >
-                Ball Update
+                Ball Event
               </Button>
 
 
@@ -2432,13 +2469,20 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
                 <Label className="text-right">Overs:</Label>
                 <Input className="h-8 bg-white dark:bg-slate-900 text-right" value={overs} onChange={(e) => setOvers(e.target.value)} />
               </div>
-              <Button variant="outline" className="w-full">Update</Button>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handleUpdateScoreboard}
+                disabled={saving}
+              >
+                {saving ? 'Updating...' : 'Update'}
+              </Button>
 
               <div className="mt-2">
                 <Input placeholder="Comment 2" className="h-8 mb-2 bg-white dark:bg-slate-900" value={comment2} onChange={(e) => setComment2(e.target.value)} />
                 <Button
                   className="bg-blue-700 hover:bg-blue-800 text-white"
-                  onClick={handleUpdateScoreboard}
+                  onClick={handleUpdateComment2}
                   disabled={saving || !currentBattingTeamId}
                 >
                   {saving ? 'Updating...' : 'Update'}
@@ -2638,7 +2682,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               onClick={async () => {
                                 try {
                                   setSaving(true);
@@ -2650,7 +2694,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
                                 } finally {
                                   setSaving(false);
                                 }
-                              }} 
+                              }}
                               disabled={!bowler.inScorecard}
                             >
                               Set as Current Bowler
@@ -2745,13 +2789,10 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
                     <TableRow key={batsman.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800 ${batsman.status === 'out' ? 'opacity-70' : ''} ${batsman.inScorecard ? 'bg-red-50/50 dark:bg-red-900/30 font-medium' : 'opacity-60'}`}>
                       <TableCell className="p-2 text-center">
                         <div className="flex flex-col items-center gap-1">
-                          <input 
-                            type="radio" 
-                            name="activeBatsman" 
-                            checked={scorecard?.batting?.some((sc: any) => {
-                              const scPlayerId = getPlayerIdString(sc.playerId);
-                              return scPlayerId === batsman._playerId && sc.isOnStrike === true;
-                            }) || false}
+                          <input
+                            type="radio"
+                            name="activeBatsman"
+                            checked={liveStatus?.currentStrikerId && getPlayerIdString(liveStatus.currentStrikerId) === batsman._playerId}
                             onChange={async () => {
                               if (!batsman.inScorecard || batsman.status === 'out' || saving) return;
                               try {
@@ -2765,21 +2806,15 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
                                 setSaving(false);
                               }
                             }}
-                            className="accent-green-600 cursor-pointer" 
+                            className="accent-green-600 cursor-pointer"
                             disabled={!batsman.inScorecard || batsman.status === 'out' || saving}
                           />
                           {batsman.inScorecard && !batsman.dismissal && (
                             <>
-                              {scorecard?.batting?.some((sc: any) => {
-                                const scPlayerId = getPlayerIdString(sc.playerId);
-                                return scPlayerId === batsman._playerId && sc.isOnStrike === true;
-                              }) && (
+                              {liveStatus?.currentStrikerId && getPlayerIdString(liveStatus.currentStrikerId) === batsman._playerId && (
                                 <span className="text-[10px] text-orange-600 font-bold" title="On Strike">⚡</span>
                               )}
-                              {scorecard?.batting?.some((sc: any) => {
-                                const scPlayerId = getPlayerIdString(sc.playerId);
-                                return scPlayerId === batsman._playerId && sc.isOnStrike === false && sc.isOut === false;
-                              }) && (
+                              {liveStatus?.currentNonStrikerId && getPlayerIdString(liveStatus.currentNonStrikerId) === batsman._playerId && (
                                 <span className="text-[10px] text-blue-600 font-bold" title="Non-Striker">🔄</span>
                               )}
                             </>
@@ -2791,15 +2826,9 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
                         {batsman.dismissal && <div className="text-[10px] text-red-600">{batsman.dismissal}</div>}
                         {batsman.inScorecard && !batsman.dismissal && (
                           <div className="text-[10px] font-bold">
-                            {scorecard?.batting?.some((sc: any) => {
-                              const scPlayerId = getPlayerIdString(sc.playerId);
-                              return scPlayerId === batsman._playerId && sc.isOnStrike === true;
-                            }) ? (
+                            {liveStatus?.currentStrikerId && getPlayerIdString(liveStatus.currentStrikerId) === batsman._playerId ? (
                               <span className="text-orange-600">⚡ On Strike</span>
-                            ) : scorecard?.batting?.some((sc: any) => {
-                              const scPlayerId = getPlayerIdString(sc.playerId);
-                              return scPlayerId === batsman._playerId && sc.isOnStrike === false && sc.isOut === false;
-                            }) ? (
+                            ) : liveStatus?.currentNonStrikerId && getPlayerIdString(liveStatus.currentNonStrikerId) === batsman._playerId ? (
                               <span className="text-blue-600">🔄 Non-Striker</span>
                             ) : batsman.status === 'batting' ? (
                               <span className="text-green-600">Batting</span>
@@ -2914,7 +2943,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
                             )}
                             <DropdownMenuSeparator />
                             <DropdownMenuLabel>Strike Position</DropdownMenuLabel>
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               onClick={async () => {
                                 try {
                                   setSaving(true);
@@ -2926,12 +2955,12 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
                                 } finally {
                                   setSaving(false);
                                 }
-                              }} 
+                              }}
                               disabled={!batsman.inScorecard || batsman.status === 'out'}
                             >
                               Set as Striker (On Strike)
                             </DropdownMenuItem>
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               onClick={async () => {
                                 try {
                                   setSaving(true);
@@ -2943,7 +2972,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
                                 } finally {
                                   setSaving(false);
                                 }
-                              }} 
+                              }}
                               disabled={!batsman.inScorecard || batsman.status === 'out'}
                             >
                               Set as Non-Striker
