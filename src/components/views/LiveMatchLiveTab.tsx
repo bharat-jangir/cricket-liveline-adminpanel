@@ -32,7 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
-import { MoreVertical, RefreshCw, Plus, Save } from "lucide-react";
+import { MoreVertical, RefreshCw, Plus, Save, Pencil } from "lucide-react";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import {
   Dialog,
@@ -121,6 +121,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
 
   const [bowlers, setBowlers] = useState<Bowler[]>([]);
   const [batsmen, setBatsmen] = useState<Batsman[]>([]);
+  const [editingDismissalId, setEditingDismissalId] = useState<number | null>(null);
 
   // Squad states for full Playing XI display
   const [battingSquad, setBattingSquad] = useState<any[]>([]);
@@ -242,6 +243,8 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
 
   // Match state
   const [currentBall, setCurrentBall] = useState("0");
+  const [ballEventInput, setBallEventInput] = useState("");
+  const currentBallInputRef = useRef<HTMLInputElement>(null);
   const [runs, setRuns] = useState("0");
   const [wickets, setWickets] = useState("0");
   const [overs, setOvers] = useState("0.0");
@@ -318,11 +321,23 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
           </div>
           <div className={`text-[10px] ${currentBattingTeamId === teamId ? 'text-slate-400' : 'text-slate-400'}`}>
             CRR: {(() => {
+              if (liveStatus && liveStatus.runRate && liveStatus.runRate > 0) return liveStatus.runRate.toFixed(2);
               const r = parseFloat(runs);
-              const o = parseFloat(overs);
-              if (isNaN(r) || isNaN(o) || o <= 0) return "0.00";
-              return (r / o).toFixed(2);
+              // Correctly convert overs string (e.g. "7.3") to decimal (7.5)
+              const oversParts = String(overs).split('.');
+              const completedOvers = parseInt(oversParts[0]) || 0;
+              const ballsInCurrentOver = parseInt(oversParts[1]) || 0;
+              const totalOvers = completedOvers + (ballsInCurrentOver / 6);
+
+              if (isNaN(r) || totalOvers <= 0) return "0.00";
+              return (r / totalOvers).toFixed(2);
             })()}
+            {liveStatus && liveStatus.requiredRunRate && liveStatus.requiredRunRate > 0 && (
+              <span className="ml-2">RRR: {liveStatus.requiredRunRate.toFixed(2)}</span>
+            )}
+            {liveStatus && liveStatus.ballsRemaining && liveStatus.ballsRemaining > 0 && (
+              <span className="ml-2">({liveStatus.ballsRemaining} balls left)</span>
+            )}
           </div>
         </>
       );
@@ -386,9 +401,12 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
         LiveMatchService.getScorecard(matchId, parseInt(currentInning)),
       ]);
 
+      let latestStatus: any = null;
+
       // Handle live status
       if (statusResponse.status === 'fulfilled' && statusResponse.value) {
         const status = statusResponse.value as any;
+        latestStatus = status;
         console.log('Live status loaded:', status);
         console.log('Team data in status:', {
           battingTeamId: status.battingTeamId,
@@ -494,8 +512,8 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
       if (scorecardResponse.status === 'fulfilled' && scorecardResponse.value) {
         const scorecardData = scorecardResponse.value;
         setScorecard(scorecardData);
-        // Transform scorecard data to component state
-        transformScorecardToState(scorecardData);
+        // Transform scorecard data to component state - passing latest status for sync
+        transformScorecardToState(scorecardData, latestStatus);
 
         // Load extras from inning data
         if (scorecardData.inning) {
@@ -507,6 +525,20 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
             b: scorecardData.inning.byes || 0,
             p: scorecardData.inning.penalties || 0,
           });
+
+          // Update runs, wickets, and overs from scorecard inning data
+          // This ensures the UI stays in sync with the backend state
+          if (scorecardData.inning.totalRuns !== undefined) {
+            setRuns(String(scorecardData.inning.totalRuns));
+          }
+          if (scorecardData.inning.totalWickets !== undefined) {
+            setWickets(String(scorecardData.inning.totalWickets));
+          }
+          if (scorecardData.inning.totalBalls !== undefined) {
+            const totalOvers = Math.floor(scorecardData.inning.totalBalls / 6);
+            const remainderBalls = scorecardData.inning.totalBalls % 6;
+            setOvers(`${totalOvers}.${remainderBalls}`);
+          }
 
           // If teams weren't set from live status, try to get them from inning data or fall back to matchData
           if (!currentBattingTeamId) {
@@ -663,48 +695,59 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
     }
   }, [matchId, currentInning, loadLiveData, loadOverHistory, loadSquads, matchData]);
 
-  const transformScorecardToState = useCallback((data: Scorecard) => {
+  const transformScorecardToState = useCallback((data: Scorecard, currentStatus?: any) => {
+    const statusToUse = currentStatus || liveStatus;
+    const strikerId = statusToUse?.currentStrikerId ? getPlayerIdString(statusToUse.currentStrikerId) : null;
+    const nonStrikerId = statusToUse?.currentNonStrikerId ? getPlayerIdString(statusToUse.currentNonStrikerId) : null;
+    const currentBowlerId = statusToUse?.currentBowlerId ? getPlayerIdString(statusToUse.currentBowlerId) : null;
+
     if (!data || !data.batting || !data.bowling) {
       setBatsmen([]);
       setBowlers([]);
       return;
     }
 
-    // Transform batting scorecard merging with squad
-    const transformedBatsmen: Batsman[] = battingSquad.map((player, index) => {
-      const scorecardEntry = data.batting.find(b => {
-        const pId = typeof b.playerId === 'object' ? b.playerId._id : b.playerId;
-        return String(pId) === String(player._id);
-      });
+    // List of player IDs already processed from scorecard
+    const processedBatsmanIds = new Set<string>();
 
-      if (scorecardEntry) {
-        const inScorecard = (scorecardEntry as any).isVisible !== undefined ? (scorecardEntry as any).isVisible : true;
-        // Determine status: if in scorecard and not out, they're batting (either striker or non-striker)
-        let status: 'batting' | 'out' | 'yetToBat' = 'yetToBat';
-        if (scorecardEntry.isOut) {
-          status = 'out';
-        } else if (inScorecard) {
-          // If they're in the scorecard and not out, they're batting (could be striker or non-striker)
-          status = 'batting';
-        }
-        return {
-          id: index + 1,
-          name: player.name,
-          dismissal: scorecardEntry.dismissalText || undefined,
-          runs: scorecardEntry.runs ?? 0,
-          balls: scorecardEntry.balls ?? 0,
-          fours: scorecardEntry.fours ?? 0,
-          sixes: scorecardEntry.sixes ?? 0,
-          to: scorecardEntry.to ?? '',
-          tr: scorecardEntry.tr ?? 0,
-          status,
-          inScorecard,
-          _playerId: String(player._id),
-        };
+    // 1. Transform active batting scorecard entries
+    const scorecardBatsmen: Batsman[] = data.batting.map((entry, index) => {
+      const pId = typeof entry.playerId === 'object' ? entry.playerId._id : entry.playerId;
+      processedBatsmanIds.add(String(pId));
+
+      const inScorecard = entry.isVisible !== undefined ? entry.isVisible : true;
+      let status: 'batting' | 'out' | 'yetToBat' = 'yetToBat';
+
+      const isStriker = strikerId && String(pId) === String(strikerId);
+      const isNonStriker = nonStrikerId && String(pId) === String(nonStrikerId);
+
+      if (entry.isOut) {
+        status = 'out';
+      } else if (isStriker || isNonStriker || entry.isOnStrike || inScorecard) {
+        status = 'batting';
       }
 
       return {
         id: index + 1,
+        name: typeof entry.playerId === 'object' ? (entry.playerId.name || entry.playerId.fullName || 'Unknown') : 'Unknown',
+        dismissal: entry.dismissalText || undefined,
+        runs: entry.runs ?? 0,
+        balls: entry.balls ?? 0,
+        fours: entry.fours ?? 0,
+        sixes: entry.sixes ?? 0,
+        to: entry.to ?? '',
+        tr: entry.tr ?? 0,
+        status,
+        inScorecard,
+        _playerId: String(pId),
+      };
+    });
+
+    // 2. Add players from squad who haven't batted yet
+    const yetToBatBatsmen: Batsman[] = battingSquad
+      .filter(player => !processedBatsmanIds.has(String(player._id)))
+      .map((player, index) => ({
+        id: scorecardBatsmen.length + index + 1,
         name: player.name,
         runs: 0,
         balls: 0,
@@ -715,36 +758,41 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
         status: 'yetToBat',
         inScorecard: false,
         _playerId: String(player._id),
-      };
-    });
+      }));
 
-    // Transform bowling scorecard merging with squad
-    const transformedBowlers: Bowler[] = bowlingSquad.map((player, index) => {
-      const scorecardEntry = data.bowling.find(b => {
-        const pId = typeof b.playerId === 'object' ? b.playerId._id : b.playerId;
-        return String(pId) === String(player._id);
-      });
+    const transformedBatsmen = [...scorecardBatsmen, ...yetToBatBatsmen];
 
-      if (scorecardEntry) {
-        const inScorecard = (scorecardEntry as any).isVisible !== undefined ? (scorecardEntry as any).isVisible : true;
-        const isCurrentBowler = (scorecardEntry as any).isCurrentBowler === true;
-        return {
-          id: index + 1,
-          name: player.name,
-          overs: scorecardEntry.completedOvers !== undefined && scorecardEntry.balls !== undefined
-            ? `${scorecardEntry.completedOvers}.${scorecardEntry.balls % 6}`
-            : '0.0',
-          maidens: scorecardEntry.maidens ?? 0,
-          runs: scorecardEntry.runs ?? 0,
-          wickets: scorecardEntry.wickets ?? 0,
-          isSelected: isCurrentBowler,
-          inScorecard,
-          _playerId: String(player._id),
-        };
-      }
+    // List of player IDs already processed from scorecard
+    const processedBowlerIds = new Set<string>();
+
+    // 3. Transform active bowling scorecard entries
+    const scorecardBowlers: Bowler[] = data.bowling.map((entry, index) => {
+      const pId = typeof entry.playerId === 'object' ? entry.playerId._id : entry.playerId;
+      processedBowlerIds.add(String(pId));
+
+      const inScorecard = entry.isVisible !== undefined ? entry.isVisible : true;
+      const isCurrentBowler = entry.isCurrentBowler === true || (currentBowlerId && String(pId) === String(currentBowlerId));
 
       return {
         id: index + 1,
+        name: typeof entry.playerId === 'object' ? (entry.playerId.name || entry.playerId.fullName || 'Unknown') : 'Unknown',
+        overs: entry.completedOvers !== undefined && entry.balls !== undefined
+          ? `${entry.completedOvers}.${entry.balls % 6}`
+          : '0.0',
+        maidens: entry.maidens ?? 0,
+        runs: entry.runs ?? 0,
+        wickets: entry.wickets ?? 0,
+        isSelected: !!isCurrentBowler,
+        inScorecard,
+        _playerId: String(pId),
+      };
+    });
+
+    // 4. Add players from squad who haven't bowled yet
+    const yetToBowlBowlers: Bowler[] = bowlingSquad
+      .filter(player => !processedBowlerIds.has(String(player._id)))
+      .map((player, index) => ({
+        id: scorecardBowlers.length + index + 1,
         name: player.name,
         overs: '0.0',
         maidens: 0,
@@ -753,8 +801,9 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
         isSelected: false,
         inScorecard: false,
         _playerId: String(player._id),
-      };
-    });
+      }));
+
+    const transformedBowlers = [...scorecardBowlers, ...yetToBowlBowlers];
 
     // Find last wicket
     if (data.inning?.lastWicket) {
@@ -808,7 +857,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
 
     setBatsmen(transformedBatsmen);
     setBowlers(transformedBowlers);
-  }, [battingSquad, bowlingSquad]);
+  }, [battingSquad, bowlingSquad, liveStatus, getPlayerIdString]);
 
   const handleTeamClick = (team: string, teamId: string) => {
     if (team !== currentBattingTeam) {
@@ -1358,6 +1407,28 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
         isOnStrike: status === 'batting',
       };
 
+      // When marking a batsman as out, automatically set TO (Total Over) and TR (Total Runs)
+      // to capture the current match state at the time of dismissal
+      if (status === 'out') {
+        updateDto.to = overs; // Set TO to current overs
+        updateDto.tr = runs;  // Set TR to current total runs
+
+        // Auto-set dismissal text to "out [Bowler Name]"
+        const currentBowler = bowlers.find(b => b.isSelected);
+        if (currentBowler) {
+          // Format name: "Hardik Pandya" -> "H Pandya"
+          const nameParts = currentBowler.name.trim().split(' ');
+          const formattedName = nameParts.length > 1
+            ? `${nameParts[0][0]} ${nameParts.slice(1).join(' ')}`
+            : currentBowler.name;
+
+          updateDto.dismissalText = `out ${formattedName}`;
+          updateDto.bowlerId = currentBowler._playerId;
+        } else {
+          updateDto.dismissalText = "out";
+        }
+      }
+
       await LiveMatchService.updateBatsman(
         matchId,
         parseInt(currentInning),
@@ -1494,13 +1565,18 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
 
   // Update current ball using simple event system
   const handleUpdateCurrentBall = async () => {
-    if (!matchId || !currentBall) return;
+    if (!matchId || !ballEventInput) return;
     try {
       setSaving(true);
       // Use the simple event system instead of direct API call
-      await LiveMatchService.handleSimpleEvent(matchId, currentBall);
+      await LiveMatchService.handleSimpleEvent(matchId, ballEventInput);
       toast.success('Event processed successfully');
+      setBallEventInput("");
       await loadLiveData(true);
+      // Small timeout to ensure input is rendered and available after reload
+      setTimeout(() => {
+        currentBallInputRef.current?.focus();
+      }, 100);
     } catch (error: any) {
       console.error('Failed to process event:', error);
       toast.error(error.response?.data?.userMessage || 'Failed to process event');
@@ -2445,10 +2521,23 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
               <span className="font-bold">Scoreboard</span>
             </div>
             <div className="bg-blue-100 dark:bg-slate-800 p-4 flex flex-col gap-3">
+              {/* Current Ball Display */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded p-2 text-center">
+                <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">Last Ball Result</div>
+                <div className="text-lg font-bold text-slate-900 dark:text-slate-100">{currentBall}</div>
+              </div>
+
               <Input
+                ref={currentBallInputRef}
                 className="text-center text-2xl font-bold h-12 bg-white dark:bg-slate-900"
-                value={currentBall}
-                onChange={(e) => setCurrentBall(e.target.value)}
+                value={ballEventInput}
+                onChange={(e) => setBallEventInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleUpdateCurrentBall();
+                  }
+                }}
+                placeholder="Event"
               />
               <Button
                 className="bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-600"
@@ -2589,19 +2678,19 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
                           <input
                             type="radio"
                             name="selectedBowler"
-                            checked={bowler.isSelected || (scorecard?.bowling?.some((sc: any) => getPlayerIdString(sc.playerId) === bowler._playerId && sc.isCurrentBowler))}
+                            checked={bowler.isSelected}
                             onChange={() => handleBowlerSelect(bowler.id)}
                             className="accent-blue-600 cursor-pointer"
                             disabled={!bowler.inScorecard || saving}
                           />
-                          {scorecard?.bowling?.some((sc: any) => getPlayerIdString(sc.playerId) === bowler._playerId && sc.isCurrentBowler) && (
+                          {bowler.isSelected && (
                             <span className="text-[10px] text-blue-600 font-bold">🎯</span>
                           )}
                         </div>
                       </TableCell>
                       <TableCell className="p-2 text-xs font-medium">
                         {bowler.name}
-                        {scorecard?.bowling?.some((sc: any) => getPlayerIdString(sc.playerId) === bowler._playerId && sc.isCurrentBowler) && (
+                        {bowler.isSelected && (
                           <span className="ml-2 text-[10px] text-blue-600 font-bold">Current Bowler</span>
                         )}
                         {!bowler.inScorecard && <span className="ml-2 text-[10px] text-slate-500 italic">(Yet to bowl)</span>}
@@ -2792,7 +2881,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
                           <input
                             type="radio"
                             name="activeBatsman"
-                            checked={liveStatus?.currentStrikerId && getPlayerIdString(liveStatus.currentStrikerId) === batsman._playerId}
+                            checked={!!(liveStatus?.currentStrikerId && getPlayerIdString(liveStatus.currentStrikerId) === batsman._playerId)}
                             onChange={async () => {
                               if (!batsman.inScorecard || batsman.status === 'out' || saving) return;
                               try {
@@ -2823,7 +2912,49 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
                       </TableCell>
                       <TableCell className="p-2 text-xs">
                         <div className="text-slate-900 dark:text-slate-200">{batsman.name}</div>
-                        {batsman.dismissal && <div className="text-[10px] text-red-600">{batsman.dismissal}</div>}
+                        {(batsman.dismissal || batsman.status === 'out' || editingDismissalId === batsman.id) && (
+                          <div className="text-[10px] text-red-600 flex items-center gap-1 min-h-[16px]">
+                            {editingDismissalId === batsman.id ? (
+                              <Input
+                                autoFocus
+                                className="h-5 w-32 p-0 text-[10px] bg-white dark:bg-slate-800 border border-red-300 dark:border-red-700 px-1"
+                                value={batsman.dismissal || ''}
+                                onChange={(e) => handleBatsmanStatInputChange(batsman.id, 'dismissal', e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleBatsmanStatSave(batsman.id, 'dismissal', e.currentTarget.value);
+                                    setEditingDismissalId(null);
+                                  } else if (e.key === 'Escape') {
+                                    setEditingDismissalId(null);
+                                  }
+                                }}
+                                onBlur={(e) => {
+                                  handleBatsmanStatSave(batsman.id, 'dismissal', e.target.value);
+                                  setEditingDismissalId(null);
+                                }}
+                              />
+                            ) : (
+                              <>
+                                <span>{batsman.dismissal || 'out'}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  className="h-3 w-3 p-0 hover:bg-transparent"
+                                  onClick={(e: React.MouseEvent) => {
+                                    e.stopPropagation();
+                                    if (!batsman.dismissal) {
+                                      handleBatsmanStatInputChange(batsman.id, 'dismissal', 'out');
+                                    }
+                                    setEditingDismissalId(batsman.id);
+                                  }}
+                                >
+                                  <Pencil className="h-3 w-3 opacity-50 hover:opacity-100 dark:text-red-400" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        )}
                         {batsman.inScorecard && !batsman.dismissal && (
                           <div className="text-[10px] font-bold">
                             {liveStatus?.currentStrikerId && getPlayerIdString(liveStatus.currentStrikerId) === batsman._playerId ? (

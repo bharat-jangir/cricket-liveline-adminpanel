@@ -168,6 +168,7 @@ export interface BowlingScorecard {
   fours: number;
   sixes: number;
   isVisible?: boolean;
+  isCurrentBowler?: boolean;
 }
 
 export interface UpdateBowlerDto {
