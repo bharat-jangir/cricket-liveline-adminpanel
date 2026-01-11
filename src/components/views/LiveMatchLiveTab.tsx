@@ -776,9 +776,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
       return {
         id: index + 1,
         name: typeof entry.playerId === 'object' ? (entry.playerId.name || entry.playerId.fullName || 'Unknown') : 'Unknown',
-        overs: entry.completedOvers !== undefined && entry.balls !== undefined
-          ? `${entry.completedOvers}.${entry.balls % 6}`
-          : '0.0',
+        overs: entry.overs !== undefined ? String(entry.overs) : '0.0',
         maidens: entry.maidens ?? 0,
         runs: entry.runs ?? 0,
         wickets: entry.wickets ?? 0,
