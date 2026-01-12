@@ -18,6 +18,7 @@
  * - 'wd': Wide ball
  * - 'wdnb': Wide + No ball
  * - 'bs': Bowler stopped
+ * - 'Ctrl+Z': Undo last ball (works in input fields too)
  * 
  * @module useSimpleKeyboardScore
  */
@@ -148,7 +149,14 @@ export function useSimpleKeyboardScore(options: UseSimpleKeyboardScoreOptions) {
     // Ignore if disabled
     if (!enabled) return;
 
-    // Ignore if focused on input elements
+    // Handle Ctrl+Z for undo (works even in input fields)
+    if (event.ctrlKey && event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      dispatchEvent('UNDO');
+      return;
+    }
+
+    // Ignore if focused on input elements for other keys
     const target = event.target as HTMLElement;
     if (ignoreElements.includes(target.tagName)) {
       return;
