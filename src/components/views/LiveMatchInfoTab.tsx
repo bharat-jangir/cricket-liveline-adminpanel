@@ -31,12 +31,14 @@ import {
   UserCog,
   Users,
   Loader2,
+  Zap,
 } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { toast } from "sonner";
 import { LiveMatchService, type MatchSquad } from "../../services/live-match.service";
 import { MatchService } from "../../services/match.service";
 import { SeriesTeamsService } from "../../services/series-teams.service";
+import { UmpireSelect } from "../ui/umpire-select";
 
 interface MatchData {
   team1?: { name?: string };
@@ -57,12 +59,14 @@ interface Player {
   id: number;
   name: string;
   isFavorite: boolean;
+  isImpactPlayer?: boolean;
   playerId?: string; // Store player ID for API calls
 }
 
 interface Squad {
   playingXI: string[]; // Store player IDs, not names
   onBench: Player[];
+  playerNameMap?: Map<string, string>; // Map of playerId -> playerName
 }
 
 interface PlayerRoles {
@@ -70,6 +74,7 @@ interface PlayerRoles {
     captain?: boolean;
     wicketKeeper?: boolean;
     viceCaptain?: boolean;
+    impact?: boolean;
     role?: "batsman" | "bowler" | "allRounder";
   };
 }
@@ -171,7 +176,7 @@ export function LiveMatchInfoTab({
           console.log('Playing XI raw:', squad.playingXI);
           console.log('Bench raw:', squad.bench);
 
-          // Transform playing XI - store player IDs
+          // Transform playing XI - store player IDs and create player map
           const playingXI = (squad.playingXI || []).map((p: any) => {
             if (typeof p === 'object' && p !== null && !Array.isArray(p)) {
               return p._id || String(p);
@@ -179,8 +184,19 @@ export function LiveMatchInfoTab({
             return String(p);
           });
 
-          // Transform bench - handle both populated objects and string IDs, store playerId
-          const bench = (squad.bench || []).map((p: any, idx: number) => {
+          // Create player map from all players (playing XI + bench)
+          const allSquadPlayers = [...(squad.playingXI || []), ...(squad.bench || [])];
+          const playerNameMap = new Map<string, string>();
+          allSquadPlayers.forEach((p: any) => {
+            if (typeof p === 'object' && p !== null && !Array.isArray(p)) {
+              const playerId = p._id || String(p);
+              const playerName = p.name || p.fullName || 'Unknown';
+              playerNameMap.set(playerId, playerName);
+            }
+          });
+
+          // Transform ALL squad players (playing XI + bench) into a master list (onBench)
+          const allPlayersForState = allSquadPlayers.map((p: any, idx: number) => {
             let playerName: string;
             let playerId: string;
 
@@ -201,7 +217,7 @@ export function LiveMatchInfoTab({
           });
 
           console.log('Transformed Playing XI:', playingXI);
-          console.log('Transformed Bench:', bench);
+          console.log('Transformed All Players:', allPlayersForState);
 
           // Extract role information from squad
           const captainId = typeof squad.captainId === 'object' && squad.captainId !== null
@@ -210,38 +226,29 @@ export function LiveMatchInfoTab({
             ? (squad.viceCaptainId as any)._id : squad.viceCaptainId;
           const wicketKeeperId = typeof squad.wicketKeeperId === 'object' && squad.wicketKeeperId !== null
             ? (squad.wicketKeeperId as any)._id : squad.wicketKeeperId;
+          const impactPlayerId = typeof squad.impactPlayerId === 'object' && squad.impactPlayerId !== null
+            ? (squad.impactPlayerId as any)._id : squad.impactPlayerId;
 
           // Update player roles
           const newRoles: PlayerRoles = {};
-          [...playingXI, ...bench.map(b => b.name)].forEach(playerName => {
-            // Find the player ID from the squad data
-            const allPlayers = [...(squad.playingXI || []), ...(squad.bench || [])];
-            const playerObj = allPlayers.find((p: any) => {
-              if (typeof p === 'object' && p !== null && !Array.isArray(p)) {
-                return (p.name || p.fullName) === playerName;
-              }
-              return false;
-            });
 
-            const pid = playerObj && typeof playerObj === 'object' && !Array.isArray(playerObj)
-              ? (playerObj as any)._id : null;
-
-            if (pid) {
-              newRoles[playerName] = {
-                captain: String(pid) === String(captainId),
-                viceCaptain: String(pid) === String(viceCaptainId),
-                wicketKeeper: String(pid) === String(wicketKeeperId),
-              };
-            }
+          allPlayersForState.forEach((player) => {
+            const pid = player.playerId;
+            newRoles[String(pid)] = {
+              captain: String(pid) === String(captainId),
+              viceCaptain: String(pid) === String(viceCaptainId),
+              wicketKeeper: String(pid) === String(wicketKeeperId),
+              impact: String(pid) === String(impactPlayerId),
+            };
           });
           setPlayerRoles(prev => ({ ...prev, ...newRoles }));
 
           if (String(teamId) === String(team1Id)) {
-            console.log('Setting Team 1 squad:', { playingXI, onBench: bench });
-            setTeam1Squad({ playingXI, onBench: bench });
+            console.log('Setting Team 1 squad:', { playingXI, onBench: allPlayersForState });
+            setTeam1Squad({ playingXI, onBench: allPlayersForState, playerNameMap } as any);
           } else if (String(teamId) === String(team2Id)) {
-            console.log('Setting Team 2 squad:', { playingXI, onBench: bench });
-            setTeam2Squad({ playingXI, onBench: bench });
+            console.log('Setting Team 2 squad:', { playingXI, onBench: allPlayersForState });
+            setTeam2Squad({ playingXI, onBench: allPlayersForState, playerNameMap } as any);
           }
         });
       } else {
@@ -338,35 +345,37 @@ export function LiveMatchInfoTab({
   }, [matchId, team1Id, team2Id, seriesId, matchFormat, matchData]);
 
   useEffect(() => {
-    loadSquads();
-    // Load toss from matchData if available
-    if (matchData?.toss) {
-      setToss(matchData.toss);
-    }
-
-    // Load saved match info from localStorage
-    const savedMatchInfo = localStorage.getItem(`match_info_${matchId}`);
-    if (savedMatchInfo) {
+    const fetchMatchDetails = async () => {
+      if (!matchId) return;
       try {
-        const data = JSON.parse(savedMatchInfo);
-        if (data.toss && !matchData?.toss) setToss(data.toss);
-        if (data.straightUmpire) setStraightUmpire(data.straightUmpire);
-        if (data.legUmpire) setLegUmpire(data.legUmpire);
-        if (data.thirdUmpire) setThirdUmpire(data.thirdUmpire);
-        if (data.referee) setReferee(data.referee);
-        if (data.pitchReport) setPitchReport(data.pitchReport);
-        if (data.pitchBehaviour) setPitchBehaviour(data.pitchBehaviour);
-        if (data.headToHead) {
-          if (data.headToHead.team1 !== undefined) setHeadToHeadTeam1(String(data.headToHead.team1));
-          if (data.headToHead.team2 !== undefined) setHeadToHeadTeam2(String(data.headToHead.team2));
-        }
-        if (data.teamForm) {
-          if (data.teamForm.team1) setTeamFormBangladesh(data.teamForm.team1);
-          if (data.teamForm.team2) setTeamFormIndia(data.teamForm.team2);
+        const data = await LiveMatchService.getMatchDetails(matchId);
+        if (data) {
+          if (data.toss?.tossText) setToss(data.toss.tossText);
+          if (data.officials?.umpire1Id) setStraightUmpire(typeof data.officials.umpire1Id === 'string' ? data.officials.umpire1Id : data.officials.umpire1Id._id);
+          if (data.officials?.umpire2Id) setLegUmpire(typeof data.officials.umpire2Id === 'string' ? data.officials.umpire2Id : data.officials.umpire2Id._id);
+          if (data.officials?.thirdUmpireId) setThirdUmpire(typeof data.officials.thirdUmpireId === 'string' ? data.officials.thirdUmpireId : data.officials.thirdUmpireId._id);
+          if (data.officials?.refereeId) setReferee(typeof data.officials.refereeId === 'string' ? data.officials.refereeId : data.officials.refereeId._id);
+          if (data.conditions?.pitchReport) setPitchReport(data.conditions.pitchReport);
+          if (data.conditions?.pitchCondition) setPitchBehaviour(data.conditions.pitchCondition);
+          if (data.headToHead) {
+            if (data.headToHead.team1Wins !== undefined) setHeadToHeadTeam1(String(data.headToHead.team1Wins));
+            if (data.headToHead.team2Wins !== undefined) setHeadToHeadTeam2(String(data.headToHead.team2Wins));
+          }
+          if (data.teamForm) {
+            if (data.teamForm.team1Form) setTeamFormBangladesh(data.teamForm.team1Form);
+            if (data.teamForm.team2Form) setTeamFormIndia(data.teamForm.team2Form);
+          }
         }
       } catch (error) {
-        console.error('Failed to load saved match info:', error);
+        console.error('Failed to fetch match details:', error);
       }
+    };
+
+    loadSquads();
+    fetchMatchDetails();
+    // Load toss from matchData if available (as fallback)
+    if (matchData?.toss && !toss) {
+      setToss(matchData.toss);
     }
   }, [loadSquads, matchId]);
 
@@ -441,22 +450,36 @@ export function LiveMatchInfoTab({
   };
 
   const handlePlayerRole = (
-    playerName: string,
-    roleType: "captain" | "wicketKeeper" | "viceCaptain" | "role",
+    team: "team1" | "team2",
+    playerId: string,
+    roleType: "captain" | "wicketKeeper" | "viceCaptain" | "role" | "impact",
     value?: "batsman" | "bowler" | "allRounder"
   ) => {
-    const current = playerRoles[playerName] || {};
+    const current = playerRoles[playerId] || {};
     let newRoles: PlayerRoles;
     if (roleType === "role") {
       newRoles = {
         ...playerRoles,
-        [playerName]: { ...current, role: value },
+        [playerId]: { ...current, role: value },
       };
     } else {
-      newRoles = {
-        ...playerRoles,
-        [playerName]: { ...current, [roleType]: !current[roleType] },
-      };
+      const isEnabling = !current[roleType];
+      newRoles = { ...playerRoles };
+
+      // If enabling a role that should be unique (captain, viceCaptain, wicketKeeper, impact),
+      // remove it from everyone else on the same team first
+      if (isEnabling && (roleType === "captain" || roleType === "viceCaptain" || roleType === "wicketKeeper" || roleType === "impact")) {
+        const teamSquad = team === "team1" ? team1Squad : team2Squad;
+        const teamPlayerIds = teamSquad.onBench.map(p => p.playerId).filter(Boolean);
+
+        teamPlayerIds.forEach(pid => {
+          if (newRoles[pid as string]) {
+            newRoles[pid as string] = { ...newRoles[pid as string], [roleType]: false };
+          }
+        });
+      }
+
+      newRoles[playerId] = { ...current, [roleType]: !current[roleType] };
     }
     setPlayerRoles(newRoles);
   };
@@ -465,58 +488,70 @@ export function LiveMatchInfoTab({
     if (team === "team1") {
       setTeam1Squad({
         ...team1Squad,
-        playingXI: team1Squad.onBench.map((p) => p.name),
+        playingXI: team1Squad.onBench.map((p) => p.playerId!).filter(Boolean),
       });
     } else {
       setTeam2Squad({
         ...team2Squad,
-        playingXI: team2Squad.onBench.map((p) => p.name),
+        playingXI: team2Squad.onBench.map((p) => p.playerId!).filter(Boolean),
       });
     }
   };
 
   const togglePlayerToPlayingXI = (
     team: "team1" | "team2",
-    playerId: number
+    playerId: string
   ) => {
     if (team === "team1") {
-      const player = team1Squad.onBench.find((p) => p.id === playerId);
-      if (!player || !player.playerId) return;
-
-      const isInPlayingXI = team1Squad.playingXI.includes(player.playerId);
+      const isInPlayingXI = team1Squad.playingXI.includes(playerId);
       setTeam1Squad({
         ...team1Squad,
         playingXI: isInPlayingXI
-          ? team1Squad.playingXI.filter((id) => id !== player.playerId)
-          : [...team1Squad.playingXI, player.playerId],
+          ? team1Squad.playingXI.filter((id) => id !== playerId)
+          : [...team1Squad.playingXI, playerId],
       });
     } else {
-      const player = team2Squad.onBench.find((p) => p.id === playerId);
-      if (!player || !player.playerId) return;
-
-      const isInPlayingXI = team2Squad.playingXI.includes(player.playerId);
+      const isInPlayingXI = team2Squad.playingXI.includes(playerId);
       setTeam2Squad({
         ...team2Squad,
         playingXI: isInPlayingXI
-          ? team2Squad.playingXI.filter((id) => id !== player.playerId)
-          : [...team2Squad.playingXI, player.playerId],
+          ? team2Squad.playingXI.filter((id) => id !== playerId)
+          : [...team2Squad.playingXI, playerId],
       });
     }
   };
 
-  const toggleFavorite = (team: "team1" | "team2", playerId: number) => {
+  const toggleImpactPlayer = (team: "team1" | "team2", playerId: string) => {
     if (team === "team1") {
       setTeam1Squad({
         ...team1Squad,
         onBench: team1Squad.onBench.map((p) =>
-          p.id === playerId ? { ...p, isFavorite: !p.isFavorite } : p
+          p.playerId === playerId ? { ...p, isImpactPlayer: !p.isImpactPlayer } : p
         ),
       });
     } else {
       setTeam2Squad({
         ...team2Squad,
         onBench: team2Squad.onBench.map((p) =>
-          p.id === playerId ? { ...p, isFavorite: !p.isFavorite } : p
+          p.playerId === playerId ? { ...p, isImpactPlayer: !p.isImpactPlayer } : p
+        ),
+      });
+    }
+  };
+
+  const toggleFavorite = (team: "team1" | "team2", playerId: string) => {
+    if (team === "team1") {
+      setTeam1Squad({
+        ...team1Squad,
+        onBench: team1Squad.onBench.map((p) =>
+          p.playerId === playerId ? { ...p, isFavorite: !p.isFavorite } : p
+        ),
+      });
+    } else {
+      setTeam2Squad({
+        ...team2Squad,
+        onBench: team2Squad.onBench.map((p) =>
+          p.playerId === playerId ? { ...p, isFavorite: !p.isFavorite } : p
         ),
       });
     }
@@ -527,8 +562,9 @@ export function LiveMatchInfoTab({
     // playingXI already contains player IDs
     const playingXIIds = squad.playingXI.filter((id): id is string => id !== undefined && id !== null);
 
-    // Get bench player IDs from the bench array
+    // Get bench player IDs from the bench array (only players NOT in playing XI)
     const benchIds = squad.onBench
+      .filter(p => p.playerId && !squad.playingXI.includes(p.playerId))
       .map(p => p.playerId)
       .filter((id): id is string => id !== undefined && id !== null);
 
@@ -546,11 +582,12 @@ export function LiveMatchInfoTab({
       return benchPlayer ? { id, name: benchPlayer.name } : null;
     }).filter(Boolean), ...squad.onBench.map(p => ({ id: p.playerId, name: p.name }))];
 
-    const getRolePlayerId = (roleType: 'captain' | 'viceCaptain' | 'wicketKeeper'): string | undefined => {
-      const playerName = Object.entries(playerRoles).find(([_, roles]) => roles[roleType])?.[0];
-      if (!playerName) return undefined;
-      const player = allPlayers.find(p => p && p.name === playerName);
-      return player ? player.id : undefined;
+    const getRolePlayerId = (roleType: 'captain' | 'viceCaptain' | 'wicketKeeper' | 'impact'): string | null => {
+      const teamPlayerIds = allPlayers.map(p => p?.id).filter(Boolean);
+      const entry = Object.entries(playerRoles).find(([pid, roles]) =>
+        teamPlayerIds.includes(pid) && roles[roleType]
+      );
+      return entry ? entry[0] : null;
     };
 
     const updateDto = {
@@ -559,13 +596,55 @@ export function LiveMatchInfoTab({
       captainId: getRolePlayerId('captain'),
       viceCaptainId: getRolePlayerId('viceCaptain'),
       wicketKeeperId: getRolePlayerId('wicketKeeper'),
+      impactPlayerId: getRolePlayerId('impact'),
     };
 
     await LiveMatchService.updateMatchSquad(matchId, teamId, updateDto);
   };
 
-  // Save match info
-  const handleSaveMatchInfo = async () => {
+  // Save general match info only
+  const handleSaveGeneralInfo = async () => {
+    if (!matchId) return;
+    try {
+      setSaving(true);
+
+      const matchDetailsData = {
+        toss: toss ? {
+          tossText: toss,
+        } : undefined,
+        officials: {
+          umpire1Id: straightUmpire || undefined,
+          umpire2Id: legUmpire || undefined,
+          thirdUmpireId: thirdUmpire || undefined,
+          refereeId: referee || undefined,
+        },
+        conditions: {
+          pitchReport: pitchReport || undefined,
+          pitchCondition: pitchBehaviour || undefined,
+        },
+        headToHead: {
+          team1Wins: parseInt(headToHeadTeam1) || 0,
+          team2Wins: parseInt(headToHeadTeam2) || 0,
+        },
+        teamForm: {
+          team1Form: teamFormBangladesh || undefined,
+          team2Form: teamFormIndia || undefined,
+        },
+      };
+
+      // Save to database via API - use match-details endpoint
+      await LiveMatchService.updateMatchDetails(matchId, matchDetailsData);
+      toast.success('General info updated successfully');
+    } catch (error: any) {
+      console.error('Failed to save general info:', error);
+      toast.error(error.response?.data?.userMessage || error.message || 'Failed to save general info');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Save squads only
+  const handleSaveSquads = async () => {
     if (!matchId) return;
     try {
       setSaving(true);
@@ -582,66 +661,48 @@ export function LiveMatchInfoTab({
         await saveSquad(team2Id, team2Squad, team2Name);
       }
 
-      // Save match general info (toss, umpires, referee, pitch report, etc.)
-      // Store in localStorage as temporary solution until backend API is available
-      const matchInfoData = {
-        toss,
-        straightUmpire,
-        legUmpire,
-        thirdUmpire,
-        referee,
-        pitchReport,
-        pitchBehaviour,
-        headToHead: {
-          team1: parseInt(headToHeadTeam1) || 0,
-          team2: parseInt(headToHeadTeam2) || 0,
-        },
-        teamForm: {
-          team1: teamFormBangladesh,
-          team2: teamFormIndia,
-        },
-      };
-
-      // Save to localStorage with matchId as key
-      localStorage.setItem(`match_info_${matchId}`, JSON.stringify(matchInfoData));
-
-      // Also try to save via MatchService if the API supports these fields
-      // For now, we'll save what we can and use localStorage as backup
-      try {
-        // If MatchService.updateMatch supports these fields, uncomment below:
-        // await MatchService.updateMatch(matchId, {
-        //   toss,
-        //   straightUmpire,
-        //   legUmpire,
-        //   thirdUmpire,
-        //   referee,
-        //   pitchReport,
-        //   pitchBehaviour,
-        // } as any);
-      } catch (updateError) {
-        console.log('Match update API may not support all fields, using localStorage as backup');
-      }
-
-      toast.success('Match info updated successfully');
+      toast.success('Squads updated successfully');
       await loadSquads();
     } catch (error: any) {
-      console.error('Failed to save match info:', error);
+      console.error('Failed to save squads:', error);
       // Error message is already shown in saveSquad function via toast
-      // Only show generic error if it's not a validation error
       if (!error.message || !error.message.includes('Playing XI must have exactly')) {
-        toast.error(error.response?.data?.userMessage || error.message || 'Failed to save match info');
+        toast.error(error.response?.data?.userMessage || error.message || 'Failed to save squads');
       }
     } finally {
       setSaving(false);
     }
   };
 
-  const filteredTeam1Bench = team1Squad.onBench.filter((p) =>
-    p.name.toLowerCase().includes(debouncedTeam1Search.toLowerCase())
-  );
-  const filteredTeam2Bench = team2Squad.onBench.filter((p) =>
-    p.name.toLowerCase().includes(debouncedTeam2Search.toLowerCase())
-  );
+  // Create a complete player lookup map for both teams
+  const getAllPlayers = (squad: Squad) => {
+    const playerMap = new Map<string, string>();
+    squad.onBench.forEach(player => {
+      if (player.playerId && player.name) {
+        playerMap.set(player.playerId, player.name);
+      }
+    });
+    console.log('Player map:', Object.fromEntries(playerMap));
+    return playerMap;
+  };
+
+  const team1PlayerMap = getAllPlayers(team1Squad);
+  const team2PlayerMap = getAllPlayers(team2Squad);
+
+  console.log('Team1 Playing XI:', team1Squad.playingXI);
+  console.log('Team1 Player Map:', Object.fromEntries(team1PlayerMap));
+  console.log('Player Roles:', playerRoles);
+
+  const filteredTeam1Bench = team1Squad.onBench.filter((p) => {
+    const isInPlayingXI = team1Squad.playingXI.includes(p.playerId!);
+    const matchesSearch = p.name.toLowerCase().includes(debouncedTeam1Search.toLowerCase());
+    return !isInPlayingXI && matchesSearch;
+  });
+  const filteredTeam2Bench = team2Squad.onBench.filter((p) => {
+    const isInPlayingXI = team2Squad.playingXI.includes(p.playerId!);
+    const matchesSearch = p.name.toLowerCase().includes(debouncedTeam2Search.toLowerCase());
+    return !isInPlayingXI && matchesSearch;
+  });
 
   if (loading) {
     return (
@@ -700,23 +761,41 @@ export function LiveMatchInfoTab({
           </Button>
         </div>
 
-        {/* Right Side: Update Info Button */}
-        <Button
-          size="sm"
-          variant="outline"
-          className="text-xs h-8 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700"
-          onClick={handleSaveMatchInfo}
-          disabled={saving}
-        >
-          {saving ? (
-            <>
-              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            'Update info'
-          )}
-        </Button>
+        {/* Right Side: Update Buttons */}
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs h-8 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700"
+            onClick={handleSaveGeneralInfo}
+            disabled={saving}
+          >
+            {saving ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              'Update General Info'
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="default"
+            className="text-xs h-8 bg-blue-600 hover:bg-blue-700 text-white"
+            onClick={handleSaveSquads}
+            disabled={saving}
+          >
+            {saving ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              'Update Squads'
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* 3 Column Grid */}
@@ -783,40 +862,40 @@ export function LiveMatchInfoTab({
               <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                 Straight Umpire
               </Label>
-              <Input
-                value={straightUmpire || matchData.straightUmpire || ''}
-                onChange={(e) => setStraightUmpire(e.target.value)}
-                placeholder="Enter straight umpire name"
+              <UmpireSelect
+                value={straightUmpire}
+                onChange={setStraightUmpire}
+                placeholder="Select straight umpire"
               />
             </div>
             <div className="space-y-2">
               <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                 Leg Umpire
               </Label>
-              <Input
-                value={legUmpire || matchData.legUmpire || ''}
-                onChange={(e) => setLegUmpire(e.target.value)}
-                placeholder="Enter leg umpire name"
+              <UmpireSelect
+                value={legUmpire}
+                onChange={setLegUmpire}
+                placeholder="Select leg umpire"
               />
             </div>
             <div className="space-y-2">
               <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                 Third Umpire
               </Label>
-              <Input
-                value={thirdUmpire || matchData.thirdUmpire || ''}
-                onChange={(e) => setThirdUmpire(e.target.value)}
-                placeholder="Enter third umpire name"
+              <UmpireSelect
+                value={thirdUmpire}
+                onChange={setThirdUmpire}
+                placeholder="Select third umpire"
               />
             </div>
             <div className="space-y-2">
               <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                 Referee
               </Label>
-              <Input
-                placeholder="Search referee here"
+              <UmpireSelect
                 value={referee}
-                onChange={(e) => setReferee(e.target.value)}
+                onChange={setReferee}
+                placeholder="Select referee"
               />
             </div>
             <div className="space-y-2">
@@ -982,14 +1061,84 @@ export function LiveMatchInfoTab({
                 ) : (
                   <div className="space-y-2">
                     {team1Squad.playingXI.map((playerId, idx) => {
+                      const playerName = team1Squad.playerNameMap?.get(playerId) || 'Unknown Player';
                       const player = team1Squad.onBench.find(p => p.playerId === playerId);
-                      const playerName = player?.name || playerId;
+                      const roles = playerRoles[playerId] || {};
                       return (
                         <div
                           key={idx}
-                          className="text-sm text-slate-700 dark:text-slate-300"
+                          className="flex items-center justify-between text-sm text-slate-700 dark:text-slate-300 p-2 bg-white dark:bg-slate-800 rounded border"
                         >
-                          {idx + 1}. {playerName}
+                          <div className="flex items-center gap-2 flex-1">
+                            <span>{idx + 1}. {playerName}</span>
+                            {player?.isImpactPlayer && (
+                              <Badge variant="outline" className="text-xs px-1.5 py-0 bg-orange-100 text-orange-700">
+                                Impact
+                              </Badge>
+                            )}
+                            {(() => {
+                              return (
+                                <>
+                                  {roles.captain && (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800 font-bold">
+                                      C
+                                    </Badge>
+                                  )}
+                                  {roles.viceCaptain && (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:border-indigo-800 font-bold">
+                                      VC
+                                    </Badge>
+                                  )}
+                                  {roles.wicketKeeper && (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 font-bold">
+                                      WK
+                                    </Badge>
+                                  )}
+                                  {(roles.impact || player?.isImpactPlayer) && (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800 font-bold">
+                                      <Zap className="h-2.5 w-2.5 mr-0.5 fill-orange-500" />
+                                      Impact
+                                    </Badge>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-52">
+                                <DropdownMenuItem onSelect={() => handlePlayerRole("team1", playerId, "captain")}>
+                                  <Shield className="h-4 w-4 mr-2" />
+                                  {playerRoles[playerId]?.captain ? "Remove Captain" : "Make Captain"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => handlePlayerRole("team1", playerId, "viceCaptain")}>
+                                  <ShieldCheck className="h-4 w-4 mr-2" />
+                                  {playerRoles[playerId]?.viceCaptain ? "Remove Vice Captain" : "Make Vice Captain"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => handlePlayerRole("team1", playerId, "wicketKeeper")}>
+                                  <UserCog className="h-4 w-4 mr-2" />
+                                  {playerRoles[playerId]?.wicketKeeper ? "Remove Wicket Keeper" : "Make Wicket Keeper"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => handlePlayerRole("team1", playerId, "impact")}>
+                                  <Zap className="h-4 w-4 mr-2 text-orange-500" />
+                                  {playerRoles[playerId]?.impact ? "Remove Impact Player" : "Make Impact Player"}
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onSelect={() => togglePlayerToPlayingXI('team1', playerId)}
+                                  className="text-red-600 focus:text-red-600"
+                                >
+                                  <Users className="h-4 w-4 mr-2" />
+                                  Remove from XI
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </div>
                       );
                     })}
@@ -1031,21 +1180,18 @@ export function LiveMatchInfoTab({
                     <Checkbox
                       checked={player.playerId ? team1Squad.playingXI.includes(player.playerId) : false}
                       onCheckedChange={() =>
-                        togglePlayerToPlayingXI("team1", player.id)
+                        togglePlayerToPlayingXI("team1", player.playerId!)
                       }
                     />
                     <span className="text-sm text-slate-700 dark:text-slate-300 flex-1">
                       {player.name}
                     </span>
                     <button
-                      onClick={() => toggleFavorite("team1", player.id)}
+                      onClick={() => toggleFavorite("team1", player.playerId!)}
                       className="mr-1"
                     >
                       <Star
-                        className={`h-4 w-4 ${player.isFavorite
-                          ? "fill-yellow-400 text-yellow-400"
-                          : "text-slate-300 dark:text-slate-600"
-                          }`}
+                        className="h-4 w-4 fill-yellow-400 text-yellow-400"
                       />
                     </button>
                     <DropdownMenu modal={false}>
@@ -1060,64 +1206,69 @@ export function LiveMatchInfoTab({
                         className="w-48 z-[9999] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-lg -translate-x-[200px]"
                       >
                         <DropdownMenuItem
-                          onSelect={() => handlePlayerRole(player.name, "captain")}
+                          onSelect={() => handlePlayerRole("team1", player.playerId!, "captain")}
                         >
                           <Shield className="h-4 w-4 mr-2" />
-                          {playerRoles[player.name]?.captain
+                          {playerRoles[player.playerId!]?.captain
                             ? "Remove Captain"
                             : "Choose Captain"}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onSelect={() =>
-                            handlePlayerRole(player.name, "viceCaptain")
+                            handlePlayerRole("team1", player.playerId!, "viceCaptain")
                           }
                         >
                           <ShieldCheck className="h-4 w-4 mr-2" />
-                          {playerRoles[player.name]?.viceCaptain
+                          {playerRoles[player.playerId!]?.viceCaptain
                             ? "Remove Vice Captain"
                             : "Choose Vice Captain"}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onSelect={() =>
-                            handlePlayerRole(player.name, "wicketKeeper")
+                            handlePlayerRole("team1", player.playerId!, "wicketKeeper")
                           }
                         >
                           <UserCog className="h-4 w-4 mr-2" />
-                          {playerRoles[player.name]?.wicketKeeper
+                          {playerRoles[player.playerId!]?.wicketKeeper
                             ? "Remove Wicket Keeper"
                             : "Choose Wicket Keeper"}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onSelect={() =>
-                            handlePlayerRole(player.name, "role", "batsman")
+                            handlePlayerRole("team1", player.playerId!, "role", "batsman")
                           }
                         >
                           <User className="h-4 w-4 mr-2" />
                           Batsman
-                          {playerRoles[player.name]?.role === "batsman" && (
+                          {playerRoles[player.playerId!]?.role === "batsman" && (
                             <span className="ml-auto">✓</span>
                           )}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onSelect={() =>
-                            handlePlayerRole(player.name, "role", "bowler")
+                            handlePlayerRole("team1", player.playerId!, "role", "bowler")
                           }
                         >
                           <Target className="h-4 w-4 mr-2" />
                           Bowler
-                          {playerRoles[player.name]?.role === "bowler" && (
+                          {playerRoles[player.playerId!]?.role === "bowler" && (
                             <span className="ml-auto">✓</span>
                           )}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onSelect={() =>
-                            handlePlayerRole(player.name, "role", "allRounder")
+                            handlePlayerRole(
+                              "team1",
+                              player.playerId!,
+                              "role",
+                              "allRounder"
+                            )
                           }
                         >
                           <Users className="h-4 w-4 mr-2" />
                           All Rounder
-                          {playerRoles[player.name]?.role === "allRounder" && (
+                          {playerRoles[player.playerId!]?.role === "allRounder" && (
                             <span className="ml-auto">✓</span>
                           )}
                         </DropdownMenuItem>
@@ -1175,73 +1326,80 @@ export function LiveMatchInfoTab({
                     Select players from bench
                   </p>
                 ) : (
-                  <div className="space-y-2 relative">
+                  <div className="space-y-2">
                     {team2Squad.playingXI.map((playerId, idx) => {
+                      const playerName = team2Squad.playerNameMap?.get(playerId) || 'Unknown Player';
                       const player = team2Squad.onBench.find(p => p.playerId === playerId);
-                      const playerName = player?.name || playerId;
-                      const roles = playerRoles[playerName] || {};
+                      const roles = playerRoles[playerId] || {};
                       return (
                         <div
                           key={idx}
-                          className="flex items-center justify-between relative gap-2 group"
+                          className="flex items-center justify-between text-sm text-slate-700 dark:text-slate-300 p-2 bg-white dark:bg-slate-800 rounded border"
                         >
                           <div className="flex items-center gap-2 flex-1">
-                            <span className="text-sm text-slate-700 dark:text-slate-300">
-                              {idx + 1}. {playerName}
-                            </span>
+                            <span>{idx + 1}. {playerName}</span>
+                            {player?.isImpactPlayer && (
+                              <Badge variant="outline" className="text-xs px-1.5 py-0 bg-orange-100 text-orange-700">
+                                Impact
+                              </Badge>
+                            )}
                             {roles.captain && (
-                              <Badge
-                                variant="outline"
-                                className="text-xs px-1.5 py-0"
-                              >
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800 font-bold">
                                 C
                               </Badge>
                             )}
                             {roles.viceCaptain && (
-                              <Badge
-                                variant="outline"
-                                className="text-xs px-1.5 py-0"
-                              >
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:border-indigo-800 font-bold">
                                 VC
                               </Badge>
                             )}
                             {roles.wicketKeeper && (
-                              <Badge
-                                variant="outline"
-                                className="text-xs px-1.5 py-0"
-                              >
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 font-bold">
                                 WK
                               </Badge>
                             )}
-                            {roles.role && (
-                              <Badge
-                                variant="outline"
-                                className="text-xs px-1.5 py-0 capitalize"
-                              >
-                                {roles.role}
+                            {(roles.impact || player?.isImpactPlayer) && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800 font-bold">
+                                <Zap className="h-2.5 w-2.5 mr-0.5 fill-orange-500" />
+                                Impact
                               </Badge>
                             )}
                           </div>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
-                              >
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                              align="start"
-                              side="left"
-                              sideOffset={4}
-                              alignOffset={0}
-                              className="w-48 z-[9999] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-lg -translate-x-[200px]"
-                            >
-                              {/* Your items */}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <div className="flex items-center gap-1">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-52">
+                                <DropdownMenuItem onSelect={() => handlePlayerRole("team2", playerId, "captain")}>
+                                  <Shield className="h-4 w-4 mr-2" />
+                                  {playerRoles[playerId]?.captain ? "Remove Captain" : "Make Captain"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => handlePlayerRole("team2", playerId, "viceCaptain")}>
+                                  <ShieldCheck className="h-4 w-4 mr-2" />
+                                  {playerRoles[playerId]?.viceCaptain ? "Remove Vice Captain" : "Make Vice Captain"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => handlePlayerRole("team2", playerId, "wicketKeeper")}>
+                                  <UserCog className="h-4 w-4 mr-2" />
+                                  {playerRoles[playerId]?.wicketKeeper ? "Remove Wicket Keeper" : "Make Wicket Keeper"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => handlePlayerRole("team2", playerId, "impact")}>
+                                  <Zap className="h-4 w-4 mr-2 text-orange-500" />
+                                  {playerRoles[playerId]?.impact ? "Remove Impact Player" : "Make Impact Player"}
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onSelect={() => togglePlayerToPlayingXI('team2', playerId)}
+                                  className="text-red-600 focus:text-red-600"
+                                >
+                                  <Users className="h-4 w-4 mr-2" />
+                                  Remove from XI
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </div>
                       );
                     })}
@@ -1271,8 +1429,8 @@ export function LiveMatchInfoTab({
                 Select last match playing XI
               </Button>
               <p className="text-xs text-slate-500 dark:text-slate-400 italic flex items-center gap-1">
-                <Star className="h-3 w-3" />
-                Star represents the player on bench
+                <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                Filled star = On bench
               </p>
               <div className="border border-slate-200 dark:border-slate-700 rounded-md flex-1 min-h-0 overflow-y-auto">
                 {filteredTeam2Bench.map((player) => (
@@ -1283,21 +1441,18 @@ export function LiveMatchInfoTab({
                     <Checkbox
                       checked={player.playerId ? team2Squad.playingXI.includes(player.playerId) : false}
                       onCheckedChange={() =>
-                        togglePlayerToPlayingXI("team2", player.id)
+                        togglePlayerToPlayingXI("team2", player.playerId!)
                       }
                     />
                     <span className="text-sm text-slate-700 dark:text-slate-300 flex-1">
                       {player.name}
                     </span>
                     <button
-                      onClick={() => toggleFavorite("team2", player.id)}
+                      onClick={() => toggleFavorite("team2", player.playerId!)}
                       className="mr-1"
                     >
                       <Star
-                        className={`h-4 w-4 ${player.isFavorite
-                          ? "fill-yellow-400 text-yellow-400"
-                          : "text-slate-300 dark:text-slate-600"
-                          }`}
+                        className="h-4 w-4 fill-yellow-400 text-yellow-400"
                       />
                     </button>
                     <DropdownMenu modal={false}>
@@ -1314,64 +1469,69 @@ export function LiveMatchInfoTab({
                         className="w-48 z-[9999] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-lg -translate-x-[200px]"
                       >
                         <DropdownMenuItem
-                          onSelect={() => handlePlayerRole(player.name, "captain")}
+                          onSelect={() => handlePlayerRole("team2", player.playerId!, "captain")}
                         >
                           <Shield className="h-4 w-4 mr-2" />
-                          {playerRoles[player.name]?.captain
+                          {playerRoles[player.playerId!]?.captain
                             ? "Remove Captain"
                             : "Choose Captain"}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onSelect={() =>
-                            handlePlayerRole(player.name, "viceCaptain")
+                            handlePlayerRole("team2", player.playerId!, "viceCaptain")
                           }
                         >
                           <ShieldCheck className="h-4 w-4 mr-2" />
-                          {playerRoles[player.name]?.viceCaptain
+                          {playerRoles[player.playerId!]?.viceCaptain
                             ? "Remove Vice Captain"
                             : "Choose Vice Captain"}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onSelect={() =>
-                            handlePlayerRole(player.name, "wicketKeeper")
+                            handlePlayerRole("team2", player.playerId!, "wicketKeeper")
                           }
                         >
                           <UserCog className="h-4 w-4 mr-2" />
-                          {playerRoles[player.name]?.wicketKeeper
+                          {playerRoles[player.playerId!]?.wicketKeeper
                             ? "Remove Wicket Keeper"
                             : "Choose Wicket Keeper"}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onSelect={() =>
-                            handlePlayerRole(player.name, "role", "batsman")
+                            handlePlayerRole("team2", player.playerId!, "role", "batsman")
                           }
                         >
                           <User className="h-4 w-4 mr-2" />
                           Batsman
-                          {playerRoles[player.name]?.role === "batsman" && (
+                          {playerRoles[player.playerId!]?.role === "batsman" && (
                             <span className="ml-auto">✓</span>
                           )}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onSelect={() =>
-                            handlePlayerRole(player.name, "role", "bowler")
+                            handlePlayerRole("team2", player.playerId!, "role", "bowler")
                           }
                         >
                           <Target className="h-4 w-4 mr-2" />
                           Bowler
-                          {playerRoles[player.name]?.role === "bowler" && (
+                          {playerRoles[player.playerId!]?.role === "bowler" && (
                             <span className="ml-auto">✓</span>
                           )}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onSelect={() =>
-                            handlePlayerRole(player.name, "role", "allRounder")
+                            handlePlayerRole(
+                              "team2",
+                              player.playerId!,
+                              "role",
+                              "allRounder"
+                            )
                           }
                         >
                           <Users className="h-4 w-4 mr-2" />
                           All Rounder
-                          {playerRoles[player.name]?.role === "allRounder" && (
+                          {playerRoles[player.playerId!]?.role === "allRounder" && (
                             <span className="ml-auto">✓</span>
                           )}
                         </DropdownMenuItem>

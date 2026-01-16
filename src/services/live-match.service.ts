@@ -81,14 +81,16 @@ export interface MatchSquad {
   captainId?: string | { _id: string; name?: string; fullName?: string };
   viceCaptainId?: string | { _id: string; name?: string; fullName?: string };
   wicketKeeperId?: string | { _id: string; name?: string; fullName?: string };
+  impactPlayerId?: string | { _id: string; name?: string; fullName?: string };
 }
 
 export interface UpdateMatchSquadDto {
   playingXI?: string[];
   bench?: string[];
-  captainId?: string;
-  viceCaptainId?: string;
-  wicketKeeperId?: string;
+  captainId?: string | null;
+  viceCaptainId?: string | null;
+  wicketKeeperId?: string | null;
+  impactPlayerId?: string | null;
 }
 
 export interface BattingScorecard {
@@ -259,6 +261,22 @@ export interface Scorecard {
 }
 
 export class LiveMatchService {
+  // Match Details APIs (toss, officials, conditions)
+  static async getMatchDetails(matchId: string): Promise<any> {
+    try {
+      const response = await axiosInstance.get(`/admin/matches/${matchId}/match-details`);
+      return response.data?.data?.result || response.data?.result || {};
+    } catch (error: any) {
+      console.error('Error fetching match details:', error);
+      return {};
+    }
+  }
+
+  static async updateMatchDetails(matchId: string, updateDto: any): Promise<any> {
+    const response = await axiosInstance.patch(`/admin/matches/${matchId}/match-details`, updateDto);
+    return response.data?.data?.result || response.data?.result;
+  }
+
   // Live Status APIs
   static async getLiveStatus(matchId: string): Promise<LiveMatchStatus | null> {
     try {
