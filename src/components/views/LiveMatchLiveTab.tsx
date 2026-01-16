@@ -217,6 +217,8 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
     enabled: matchStatus === 'live' && !loading && !saving,
     onSuccess: async (eventString, response) => {
       console.log('Simple score event processed successfully:', eventString, response);
+      // Set current ball for immediate visual confirmation
+      setCurrentBall(eventString === 'UNDO' ? 'confirming' : eventString);
       // Silently refresh data to update UI with latest state from backend
       await loadLiveData(true);
     },
@@ -1567,8 +1569,10 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
     try {
       setSaving(true);
       // Use the simple event system instead of direct API call
-      await LiveMatchService.handleSimpleEvent(matchId, ballEventInput);
+      const response = await LiveMatchService.handleSimpleEvent(matchId, ballEventInput);
       toast.success('Event processed successfully');
+      // Set current ball for immediate visual confirmation
+      setCurrentBall(ballEventInput === 'UNDO' ? 'confirming' : ballEventInput);
       setBallEventInput("");
       await loadLiveData(true);
       // Small timeout to ensure input is rendered and available after reload
