@@ -226,13 +226,13 @@ export function MatchesView() {
           commentary: '',
         },
         odds: {
-          teamName: teamA?.shortName || teamA?.name || 'Team A',
-          back: 14,
-          lay: 15,
+          teamName: liveStatus?.oddsTeam || "",
+          back: liveStatus?.oddsBlue || 0,
+          lay: liveStatus?.oddsRed || 0,
         },
         fKeyInn: match.currentInning ? `Inn ${match.currentInning}` : undefined,
         inn: match.currentInning?.toString() || undefined,
-        comment: '',
+        comment: liveStatus?.comment2 || '',
       };
     });
   };
@@ -593,7 +593,7 @@ export function MatchesView() {
   );
 }
 
-function TeamCard({ team }) {
+function TeamCard({ team }: { team: TransformedMatch['team1'] }) {
   return (
     <div className="col-span-4 bg-slate-900 text-white p-4 rounded-md">
       <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -607,7 +607,7 @@ function TeamCard({ team }) {
   );
 }
 
-function OddsBox({ label, back, lay }) {
+function OddsBox({ label, back, lay }: { label: string; back: number; lay: number }) {
   return (
     <table className="text-xs w-full">
       <tbody>
@@ -637,7 +637,7 @@ function OddsBox({ label, back, lay }) {
 
 
 
-function getStatusClasses(status) {
+function getStatusClasses(status: string) {
   switch (true) {
     case status.startsWith("Live"):
       return "bg-red-100 text-red-700 border border-red-300";
@@ -656,7 +656,7 @@ function getStatusClasses(status) {
   }
 }
 
-function getStatusClassesNormalCss(status) {
+function getStatusClassesNormalCss(status: string) {
   switch (true) {
     case status.startsWith("Live"):
       return {
@@ -696,7 +696,7 @@ function getStatusClassesNormalCss(status) {
 }
 
 
-function getTabStyle(isActive) {
+function getTabStyle(isActive: boolean) {
   return {
     backgroundColor: isActive ? "#2563eb" : "#f1f5f9",
     color: isActive ? "white" : "#334155",

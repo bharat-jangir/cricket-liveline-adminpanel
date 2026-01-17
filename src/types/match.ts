@@ -10,7 +10,7 @@ export interface Match {
   subtitle?: string;
   slug: string;
   tournamentId?: string;
-  seriesId?: string;
+  seriesId?: string | Series;
   series?: Series; // populated
   matchType: 'international' | 'domestic' | 'league';
   matchFormat: 'test' | 'odi' | 't20' | 't20i';
