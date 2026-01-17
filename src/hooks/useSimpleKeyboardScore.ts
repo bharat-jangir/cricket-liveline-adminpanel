@@ -33,19 +33,19 @@ import { toast } from 'sonner';
 export interface UseSimpleKeyboardScoreOptions {
   /** Match ID for which to handle scoring */
   matchId: string;
-  
+
   /** Whether keyboard scoring is enabled */
   enabled?: boolean;
-  
+
   /** Callback fired when an event is successfully processed */
   onSuccess?: (eventString: string, response: any) => void;
-  
+
   /** Callback fired when an event fails to process */
   onError?: (eventString: string, error: any) => void;
-  
+
   /** Whether to show toast notifications for events */
   showToasts?: boolean;
-  
+
   /** Additional elements to ignore keyboard events from (e.g., input fields) */
   ignoreElements?: string[];
 }
@@ -84,23 +84,23 @@ export function useSimpleKeyboardScore(options: UseSimpleKeyboardScoreOptions) {
 
     try {
       isProcessingRef.current = true;
-      
+
       if (showToasts) {
         toast.loading(`Processing ${eventString}...`, { id: 'simple-score-event' });
       }
 
       const response = await LiveMatchService.handleSimpleEvent(matchId, eventString);
-      
+
       if (showToasts) {
         toast.success(`${eventString} recorded successfully`, { id: 'simple-score-event' });
       }
 
       onSuccess?.(eventString, response);
-      
+
       return response;
     } catch (error: any) {
       console.error('Error processing simple score event:', error);
-      
+
       if (showToasts) {
         toast.error(error.message || 'Failed to process score event', { id: 'simple-score-event' });
       }
@@ -123,7 +123,7 @@ export function useSimpleKeyboardScore(options: UseSimpleKeyboardScoreOptions) {
 
     // Special key combinations and single keys
     const lowerKey = key.toLowerCase();
-    
+
     switch (lowerKey) {
       case '0':
         return '0'; // Dot ball
@@ -149,12 +149,7 @@ export function useSimpleKeyboardScore(options: UseSimpleKeyboardScoreOptions) {
     // Ignore if disabled
     if (!enabled) return;
 
-    // Handle Ctrl+Z for undo (works even in input fields)
-    if (event.ctrlKey && event.key.toLowerCase() === 'z') {
-      event.preventDefault();
-      dispatchEvent('UNDO');
-      return;
-    }
+
 
     // Ignore if focused on input elements for other keys
     const target = event.target as HTMLElement;
@@ -169,7 +164,7 @@ export function useSimpleKeyboardScore(options: UseSimpleKeyboardScoreOptions) {
 
     // Map key to event string
     const eventString = mapKeyToEventString(event.key);
-    
+
     if (eventString) {
       event.preventDefault(); // Prevent default browser behavior
       dispatchEvent(eventString);
@@ -192,10 +187,10 @@ export function useSimpleKeyboardScore(options: UseSimpleKeyboardScoreOptions) {
   return {
     /** Manually dispatch a simple event */
     dispatchEvent,
-    
+
     /** Whether an event is currently being processed */
     isProcessing: isProcessingRef.current,
-    
+
     /** Map a keyboard key to a simple event string (for testing/preview) */
     mapKeyToEventString,
   };

@@ -2530,6 +2530,11 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
                   if (e.key === 'Enter') {
                     handleUpdateCurrentBall();
                   }
+                  // Handle Ctrl+Z for internal undo only in this field
+                  if (e.ctrlKey && e.key.toLowerCase() === 'z') {
+                    e.preventDefault();
+                    dispatchScoreEvent('UNDO');
+                  }
                 }}
                 placeholder="Event"
               />
