@@ -422,7 +422,7 @@ export function SeriesFixtureTab() {
                     await LiveMatchService.updateLiveStatus(newMatchId!, {
                         currentInning: 1,
                         currentOver: 0,
-                        currentBall: 0,
+                        currentBall: '0',
                         // Teams are NOT set automatically - user must set them manually
                         score: '0/0',
                         overs: '0.0',
@@ -432,9 +432,6 @@ export function SeriesFixtureTab() {
                         target: 0,
                         ballsRemaining: 0,
                     });
-
-                    // Initialize inning by fetching scorecard (creates 1st inning if missing)
-                    await LiveMatchService.getScorecard(newMatchId!, 1);
 
                     console.log('Live match data initialized for match:', newMatchId);
                 } catch (initError) {

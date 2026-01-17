@@ -190,28 +190,18 @@ export function LiveMatchInfoTab({
             return String(p);
           });
 
-          // Create player map from all players (playing XI + bench)
+          // Transform ALL squad players (playing XI + bench) into a master list
           const allSquadPlayers = [...(squad.playingXI || []), ...(squad.bench || [])];
-          const playerNameMap = new Map<string, string>();
-          allSquadPlayers.forEach((p: any) => {
-            if (typeof p === 'object' && p !== null && !Array.isArray(p)) {
-              const playerId = p._id || String(p);
-              const playerName = p.name || p.fullName || 'Unknown';
-              playerNameMap.set(playerId, playerName);
-            }
-          });
-
-          // Transform ALL squad players (playing XI + bench) into a master list (onBench)
           const allPlayersForState = allSquadPlayers.map((p: any, idx: number) => {
             let playerName: string;
             let playerId: string;
 
             if (typeof p === 'object' && p !== null && !Array.isArray(p)) {
               playerName = p.name || p.fullName || 'Unknown';
-              playerId = p._id || String(p);
+              playerId = (p._id || p.id || String(p)).toString();
             } else {
-              playerName = String(p);
               playerId = String(p);
+              playerName = 'Player ' + playerId.substring(playerId.length - 4); // Fallback to last 4 chars of ID if unknown
             }
 
             return {
@@ -220,6 +210,14 @@ export function LiveMatchInfoTab({
               isFavorite: false,
               playerId: playerId,
             };
+          });
+
+          // Create robust player map from the master list
+          const playerNameMap = new Map<string, string>();
+          allPlayersForState.forEach(p => {
+            if (p.playerId) {
+              playerNameMap.set(p.playerId, p.name);
+            }
           });
 
           console.log('Transformed Playing XI:', playingXI);
@@ -1083,7 +1081,7 @@ export function LiveMatchInfoTab({
                 ) : (
                   <div className="space-y-2">
                     {team1Squad.playingXI.map((playerId, idx) => {
-                      const playerName = team1Squad.playerNameMap?.get(playerId) || 'Unknown Player';
+                      const playerName = team1Squad.playerNameMap?.get(playerId) || team1PlayerMap.get(playerId) || 'Unknown Player';
                       const player = team1Squad.onBench.find(p => p.playerId === playerId);
                       const roles = playerRoles[playerId] || {};
                       return (
@@ -1350,7 +1348,7 @@ export function LiveMatchInfoTab({
                 ) : (
                   <div className="space-y-2">
                     {team2Squad.playingXI.map((playerId, idx) => {
-                      const playerName = team2Squad.playerNameMap?.get(playerId) || 'Unknown Player';
+                      const playerName = team2Squad.playerNameMap?.get(playerId) || team2PlayerMap.get(playerId) || 'Unknown Player';
                       const player = team2Squad.onBench.find(p => p.playerId === playerId);
                       const roles = playerRoles[playerId] || {};
                       return (

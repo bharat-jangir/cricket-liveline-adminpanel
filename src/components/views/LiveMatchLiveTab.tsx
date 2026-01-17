@@ -550,10 +550,6 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
             if (inningBattingTeamId && inningBattingTeamName) {
               setCurrentBattingTeam(inningBattingTeamName);
               setCurrentBattingTeamId(inningBattingTeamId);
-            } else {
-              // Fallback to Team 1
-              setCurrentBattingTeam(team1Name);
-              setCurrentBattingTeamId(team1Id);
             }
           }
 
@@ -564,10 +560,6 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
             if (inningBowlingTeamId && inningBowlingTeamName) {
               setCurrentBowlingTeam(inningBowlingTeamName);
               setCurrentBowlingTeamId(inningBowlingTeamId);
-            } else {
-              // Fallback to Team 2
-              setCurrentBowlingTeam(team2Name);
-              setCurrentBowlingTeamId(team2Id);
             }
           }
         }
