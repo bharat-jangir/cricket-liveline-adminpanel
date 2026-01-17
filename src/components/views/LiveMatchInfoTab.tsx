@@ -154,10 +154,10 @@ export function LiveMatchInfoTab({
   }, [team2Search]);
 
   const [pitchBehaviour, setPitchBehaviour] = useState("");
-  const [teamFormBangladesh, setTeamFormBangladesh] = useState("L.L.W.W.L.W");
+  const [teamFormBangladesh, setTeamFormBangladesh] = useState("");
   const [teamFormIndia, setTeamFormIndia] = useState("");
-  const [headToHeadTeam1, setHeadToHeadTeam1] = useState("3");
-  const [headToHeadTeam2, setHeadToHeadTeam2] = useState("7");
+  const [headToHeadTeam1, setHeadToHeadTeam1] = useState("");
+  const [headToHeadTeam2, setHeadToHeadTeam2] = useState("");
 
   // Load match squads
   const loadSquads = useCallback(async () => {
