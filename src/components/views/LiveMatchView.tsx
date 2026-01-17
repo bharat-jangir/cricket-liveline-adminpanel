@@ -22,7 +22,7 @@ import {
   Wifi,
 } from "lucide-react";
 import React from "react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { MatchService } from "../../services/match.service";
@@ -229,8 +229,9 @@ export function LiveMatchView() {
     }
   };
 
-  // Transform match data for compatibility with existing components
-  const transformedMatchData = matchData ? (() => {
+  const transformedMatchData = useMemo(() => {
+    if (!matchData) return undefined;
+
     // Try to get name via helper
     let team1Name = getTeamName(matchData.teamAId, matchData.teamA);
     let team2Name = getTeamName(matchData.teamBId, matchData.teamB);
@@ -244,25 +245,12 @@ export function LiveMatchView() {
     const team1Id = getTeamId(matchData.teamAId, matchData.teamA);
     const team2Id = getTeamId(matchData.teamBId, matchData.teamB);
 
-    console.log('Transformed match data:', {
+    console.log('Transformed match data (memoized):', {
       team1Name,
       team2Name,
       team1Id,
       team2Id,
-      hasTeam1Name: !!team1Name,
-      hasTeam2Name: !!team2Name,
     });
-
-    // If team names are empty, log detailed error
-    if (!team1Name || !team2Name) {
-      console.error('CRITICAL: Team names are empty!', {
-        matchData,
-        teamAId: matchData.teamAId,
-        teamBId: matchData.teamBId,
-        teamA: matchData.teamA,
-        teamB: matchData.teamB,
-      });
-    }
 
     return {
       id: matchData._id || id || "101",
@@ -277,11 +265,11 @@ export function LiveMatchView() {
         return str.charAt(0).toUpperCase() + str.slice(1);
       })(),
       team1: {
-        name: team1Name || 'Team 1', // Fallback to prevent empty display
+        name: team1Name || 'Team 1',
         _id: team1Id,
       },
       team2: {
-        name: team2Name || 'Team 2', // Fallback to prevent empty display
+        name: team2Name || 'Team 2',
         _id: team2Id,
       },
       series: typeof matchData.seriesId === 'object' && matchData.seriesId !== null
@@ -292,6 +280,7 @@ export function LiveMatchView() {
       matchTitle: matchData.title || '',
       date: matchData.matchDate ? new Date(matchData.matchDate).toLocaleDateString() : '',
       time: matchData.matchTime ? new Date(matchData.matchTime).toLocaleTimeString() : '',
+      venueId: matchData.venueId,
       venue: typeof matchData.venueId === 'object' && matchData.venueId !== null
         ? (matchData.venueId as any)?.name || ''
         : typeof matchData.venue === 'object' && matchData.venue !== null
@@ -306,7 +295,7 @@ export function LiveMatchView() {
       referee: "",
       pitchReport: "",
     };
-  })() : undefined;
+  }, [matchData, id]);
 
   // Mock squad data
   const [team1Squad, setTeam1Squad] = useState({

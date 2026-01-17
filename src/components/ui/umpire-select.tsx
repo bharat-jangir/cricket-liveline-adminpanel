@@ -22,7 +22,7 @@ export function UmpireSelect({ value, onChange, placeholder = "Select umpire" }:
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [selectedUmpire, setSelectedUmpire] = useState<Umpire | null>(null);
-  
+
   const dropdownRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -33,15 +33,12 @@ export function UmpireSelect({ value, onChange, placeholder = "Select umpire" }:
         `http://localhost:5001/umpires?search=${encodeURIComponent(searchTerm)}&page=${pageNum}&limit=20`
       );
       const data = await response.json();
-      
-      console.log('API Response:', data); // Debug log
-      
+
       if (data.status && data.data && data.data.result && Array.isArray(data.data.result)) {
         const newUmpires = data.data.result;
         setUmpires(prev => reset ? newUmpires : [...prev, ...newUmpires]);
         setHasMore(data.data.pagination && data.data.pagination.page < data.data.pagination.totalPages);
       } else {
-        console.error('Invalid API response structure:', data);
         setUmpires(prev => reset ? [] : prev);
         setHasMore(false);
       }
@@ -54,26 +51,42 @@ export function UmpireSelect({ value, onChange, placeholder = "Select umpire" }:
     }
   }, []);
 
-  // Load initial umpires
+  // Use ref for initial fetch to avoid double firing in strict mode or due to parent rerenders
+  const initialFetchDone = useRef(false);
   useEffect(() => {
-    fetchUmpires('', 1, true);
+    if (!initialFetchDone.current) {
+      fetchUmpires('', 1, true);
+      initialFetchDone.current = true;
+    }
   }, [fetchUmpires]);
 
-  // Search debounce
+  // Search debounce - only trigger if search is truthy
   useEffect(() => {
+    if (!search) return; // Ignore initial empty search and subsequent clears (the mount fetch handles empty)
+
     const timer = setTimeout(() => {
       setPage(1);
       fetchUmpires(search, 1, true);
-    }, 300);
+    }, 500);
     return () => clearTimeout(timer);
   }, [search, fetchUmpires]);
 
-  // Find selected umpire name
+  // Find selected umpire - stable dependency
   useEffect(() => {
-    if (value && umpires.length > 0) {
-      const found = umpires.find(u => u._id === value);
-      setSelectedUmpire(found || null);
+    if (!value) {
+      setSelectedUmpire(null);
+      return;
+    }
+
+    if (selectedUmpire && selectedUmpire._id === value) return;
+
+    const found = umpires.find(u => u._id === value);
+    if (found) {
+      setSelectedUmpire(found);
     } else {
+      // If not in current list, fetch explicitly if needed, 
+      // but for now we'll just wait for lists to populate or just show nothing if it's missing.
+      // Ideally we'd have a getUmpire endpoint like we do for venues.
       setSelectedUmpire(null);
     }
   }, [value, umpires]);
@@ -81,7 +94,7 @@ export function UmpireSelect({ value, onChange, placeholder = "Select umpire" }:
   // Handle scroll for pagination
   const handleScroll = useCallback(() => {
     if (!listRef.current || loading || !hasMore) return;
-    
+
     const { scrollTop, scrollHeight, clientHeight } = listRef.current;
     if (scrollTop + clientHeight >= scrollHeight - 5) {
       const nextPage = page + 1;
@@ -136,8 +149,8 @@ export function UmpireSelect({ value, onChange, placeholder = "Select umpire" }:
               />
             </div>
           </div>
-          
-          <div 
+
+          <div
             ref={listRef}
             className="max-h-60 overflow-y-auto"
             onScroll={handleScroll}
@@ -158,7 +171,7 @@ export function UmpireSelect({ value, onChange, placeholder = "Select umpire" }:
                 </button>
               ))
             )}
-            
+
             {loading && (
               <div className="p-2 flex items-center justify-center">
                 <Loader2 className="h-4 w-4 animate-spin" />

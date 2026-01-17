@@ -93,7 +93,7 @@ interface FixtureDisplay {
     teamA?: Team;
     teamBId: string;
     teamB?: Team;
-    venueId: string;
+    venueId?: string;
     venue?: Venue;
     matchDate: string; // YYYY-MM-DD format for input
     matchTime?: string; // datetime-local format: YYYY-MM-DDTHH:mm
@@ -383,7 +383,7 @@ export function SeriesFixtureTab() {
     const handleSaveNewFixture = async () => {
         if (!seriesId) return;
 
-        if (!newFixture.title || !newFixture.venueId || !newFixture.matchDate || !newFixture.matchTime || !newFixture.teamAId || !newFixture.teamBId) {
+        if (!newFixture.title || !newFixture.matchDate || !newFixture.matchTime || !newFixture.teamAId || !newFixture.teamBId) {
             toast.error('Please fill all required fields including Match Time');
             return;
         }
@@ -402,7 +402,7 @@ export function SeriesFixtureTab() {
                 totalInnings: newFixture.totalInnings!,
                 teamAId: newFixture.teamAId!,
                 teamBId: newFixture.teamBId!,
-                venueId: newFixture.venueId!,
+                venueId: newFixture.venueId || undefined, // venueId is optional now
                 matchDate: new Date(newFixture.matchDate!),
                 matchTime: newFixture.matchTime ? new Date(newFixture.matchTime) : undefined,
                 status: mapStatusToBackend(newFixture.status as MatchStatus),
@@ -451,7 +451,6 @@ export function SeriesFixtureTab() {
                 format: 'ODI',
                 teamAId: '',
                 teamBId: '',
-                venueId: '',
                 matchDate: '',
                 matchTime: '',
                 status: 'Scheduled',
@@ -621,25 +620,6 @@ export function SeriesFixtureTab() {
                                         <SelectItem key={team._id} value={team._id!}>
                                             {team.logo ? <span className="mr-2">{team.logo}</span> : null}
                                             {team.shortName || team.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div>
-                            <label className='text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 block'>Venue *</label>
-                            <Select
-                                value={newFixture.venueId}
-                                onValueChange={(value) => setNewFixture({ ...newFixture, venueId: value })}
-                                disabled={loadingVenues}
-                            >
-                                <SelectTrigger className='bg-white dark:bg-slate-700'>
-                                    <SelectValue placeholder="Select Venue" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {venues.map(venue => (
-                                        <SelectItem key={venue._id} value={venue._id!}>
-                                            {venue.name} {venue.city ? `, ${venue.city}` : ''}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -914,25 +894,7 @@ export function SeriesFixtureTab() {
                                     </TableCell>
 
                                     <TableCell>
-                                        {isEditing ? (
-                                            <Select
-                                                value={fixture.venueId}
-                                                onValueChange={(value) => handleUpdateFixture(fixture._id!, 'venueId', value)}
-                                            >
-                                                <SelectTrigger className='h-8 bg-white dark:bg-slate-700'>
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {venues.map(venue => (
-                                                        <SelectItem key={venue._id} value={venue._id!}>
-                                                            {venue.name} {venue.city ? `, ${venue.city}` : ''}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        ) : (
-                                            fixture.venue ? `${fixture.venue.name}${fixture.venue.city ? `, ${fixture.venue.city}` : ''}` : 'TBD'
-                                        )}
+                                        {fixture.venue ? `${fixture.venue.name}${fixture.venue.city ? `, ${fixture.venue.city}` : ''}` : 'TBD'}
                                     </TableCell>
 
                                     <TableCell>

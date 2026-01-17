@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Checkbox } from "../ui/checkbox";
@@ -39,6 +39,9 @@ import { LiveMatchService, type MatchSquad } from "../../services/live-match.ser
 import { MatchService } from "../../services/match.service";
 import { SeriesTeamsService } from "../../services/series-teams.service";
 import { UmpireSelect } from "../ui/umpire-select";
+import { VenueSelect } from "../ui/venue-select";
+import { venueService } from "../../services/venue.service";
+import type { Venue } from "../../types/venue";
 
 interface MatchData {
   team1?: { name?: string };
@@ -53,6 +56,8 @@ interface MatchData {
   toss?: string;
   referee?: string;
   pitchReport?: string;
+  venueId?: string;
+  venueObj?: Venue;
 }
 
 interface Player {
@@ -130,6 +135,7 @@ export function LiveMatchInfoTab({
   const [thirdUmpire, setThirdUmpire] = useState("");
   const [referee, setReferee] = useState("");
   const [pitchReport, setPitchReport] = useState("");
+  const [selectedVenueId, setSelectedVenueId] = useState("");
 
   // Debounce team1 search
   useEffect(() => {
@@ -344,9 +350,11 @@ export function LiveMatchInfoTab({
     }
   }, [matchId, team1Id, team2Id, seriesId, matchFormat, matchData]);
 
+
+  const initialDetailsLoadDone = useRef(false);
   useEffect(() => {
     const fetchMatchDetails = async () => {
-      if (!matchId) return;
+      if (!matchId || initialDetailsLoadDone.current) return;
       try {
         const data = await LiveMatchService.getMatchDetails(matchId);
         if (data) {
@@ -365,19 +373,28 @@ export function LiveMatchInfoTab({
             if (data.teamForm.team1Form) setTeamFormBangladesh(data.teamForm.team1Form);
             if (data.teamForm.team2Form) setTeamFormIndia(data.teamForm.team2Form);
           }
+          if (data.venueId) {
+            setSelectedVenueId(typeof data.venueId === 'string' ? data.venueId : data.venueId._id);
+          }
         }
+        initialDetailsLoadDone.current = true;
       } catch (error) {
         console.error('Failed to fetch match details:', error);
       }
     };
 
-    loadSquads();
-    fetchMatchDetails();
-    // Load toss from matchData if available (as fallback)
-    if (matchData?.toss && !toss) {
-      setToss(matchData.toss);
-    }
-  }, [loadSquads, matchId]);
+    const loadData = async () => {
+      await loadSquads();
+      await fetchMatchDetails();
+
+      // Load toss from matchData if available (as fallback)
+      if (matchData?.toss && !toss) {
+        setToss(matchData.toss);
+      }
+    };
+
+    loadData();
+  }, [matchId, loadSquads]); // Only re-run if matchId or loadSquads reference changes
 
   // Copy squad from series
   const copySquadFromSeries = async (teamId: string, team: 'team1' | 'team2') => {
@@ -608,7 +625,7 @@ export function LiveMatchInfoTab({
     try {
       setSaving(true);
 
-      const matchDetailsData = {
+      const matchDetailsData: any = {
         toss: toss ? {
           tossText: toss,
         } : undefined,
@@ -631,6 +648,10 @@ export function LiveMatchInfoTab({
           team2Form: teamFormIndia || undefined,
         },
       };
+
+      if (selectedVenueId) {
+        matchDetailsData.venueId = selectedVenueId;
+      }
 
       // Save to database via API - use match-details endpoint
       await LiveMatchService.updateMatchDetails(matchId, matchDetailsData);
@@ -842,10 +863,10 @@ export function LiveMatchInfoTab({
               <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                 Venue
               </Label>
-              <Input
-                value={matchData.venue}
-                readOnly
-                className="bg-slate-50 dark:bg-slate-700"
+              <VenueSelect
+                value={selectedVenueId}
+                onChange={setSelectedVenueId}
+                placeholder="Select venue"
               />
             </div>
             <div className="space-y-2">
@@ -991,6 +1012,7 @@ export function LiveMatchInfoTab({
                 </div>
               </div>
             </div>
+
 
             {/* Team Form Section */}
             <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-slate-700">

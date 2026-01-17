@@ -18,7 +18,7 @@ export interface Match {
   teamA?: Team; // populated
   teamBId: string;
   teamB?: Team; // populated
-  venueId: string;
+  venueId?: string;
   venue?: Venue; // populated
   matchDate: Date | string;
   matchTime?: Date | string; // Timestamp for match time
@@ -55,7 +55,7 @@ export interface CreateMatchDto {
   matchFormat: 'test' | 'odi' | 't20' | 't20i';
   teamAId: string;
   teamBId: string;
-  venueId: string;
+  venueId?: string;
   matchDate: Date | string;
   matchTime?: Date | string; // Timestamp for match time
   localTime?: string;
