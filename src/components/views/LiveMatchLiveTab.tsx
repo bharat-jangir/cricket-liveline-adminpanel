@@ -2569,7 +2569,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
             </Button>
           </div>
 
-          <div className="flex gap-2 overflow-x-auto w-full pb-2 px-1">
+          <div className="flex gap-2 overflow-x-auto w-full pb-2 px-1 overflow-scroll">
             {overHistory.map((overData, overIndex) => (
               <div key={overIndex} className="flex gap-1 items-center border border-slate-300 dark:border-slate-600 rounded px-2 py-1 bg-slate-50 dark:bg-slate-900 min-w-fit shadow-sm">
                 <input
@@ -2577,12 +2577,13 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
                   value={overData.over}
                   onChange={(e) => handleOverNumberChange(overIndex, e.target.value)}
                   placeholder="#"
+                  disabled
                 />
-                <div className="flex gap-1">
+                <div className="flex gap-1 ">
                   {overData.runs.map((run, ballIndex) => (
                     <input
                       key={ballIndex}
-                      className={`w-6 h-6 rounded-full text-[10px] font-bold text-center focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer transition-transform hover:scale-110 ${activeBall?.overIndex === overIndex && activeBall?.ballIndex === ballIndex ? 'ring-2 ring-red-400 scale-110' : ''} ${getBallColorClass(run)}`}
+                      className={`w-12 h-6 rounded-full text-[10px] font-bold text-center focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer transition-transform hover:scale-110 ${activeBall?.overIndex === overIndex && activeBall?.ballIndex === ballIndex ? 'ring-2 ring-red-400 scale-110' : ''} ${getBallColorClass(run)}`}
                       value={getBallDisplay(run)}
                       onChange={(e) => handleOverRunChange(overIndex, ballIndex, e.target.value)}
                       onClick={() => setActiveBall({ overIndex, ballIndex })}
