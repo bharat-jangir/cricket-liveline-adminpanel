@@ -13,7 +13,7 @@ export interface Match {
   seriesId?: string | Series;
   series?: Series; // populated
   matchType: 'international' | 'domestic' | 'league';
-  matchFormat: 'test' | 'odi' | 't20' | 't20i';
+  matchFormat: 'test' | 'odi' | 't20' | 't20i' | 't10' | 'hundred';
   teamAId: string;
   teamA?: Team; // populated
   teamBId: string;
@@ -39,6 +39,9 @@ export interface Match {
     elected: 'bat' | 'bowl';
     tossTime?: Date | string;
   };
+  ballsPerOver?: number;
+  oversPerInning?: number;
+  maxBowlerLimit?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -52,7 +55,7 @@ export interface CreateMatchDto {
   tournamentId?: string;
   seriesId?: string;
   matchType: 'international' | 'domestic' | 'league';
-  matchFormat: 'test' | 'odi' | 't20' | 't20i';
+  matchFormat: 'test' | 'odi' | 't20' | 't20i' | 't10' | 'hundred';
   teamAId: string;
   teamBId: string;
   venueId?: string;
@@ -66,6 +69,9 @@ export interface CreateMatchDto {
   totalInnings?: number;
   dayNumber?: number;
   sessionNumber?: number;
+  ballsPerOver?: number;
+  oversPerInning?: number;
+  maxBowlerLimit?: number;
   isFeatured?: boolean;
   priority?: number;
   views?: number;
@@ -80,7 +86,7 @@ export interface QueryMatchesDto {
   teamId?: string;
   venueId?: string;
   status?: 'scheduled' | 'live' | 'completed' | 'abandoned' | 'cancelled';
-  matchFormat?: 'test' | 'odi' | 't20' | 't20i';
+  matchFormat?: 'test' | 'odi' | 't20' | 't20i' | 't10' | 'hundred';
   matchType?: 'international' | 'domestic' | 'league';
   page?: number;
   limit?: number;

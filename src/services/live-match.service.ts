@@ -32,6 +32,9 @@ export interface LiveMatchStatus {
   currentStrikerId?: string | null;
   currentNonStrikerId?: string | null;
   currentBowlerId?: string | null;
+  ballsPerOver?: number;
+  oversPerInning?: number;
+  maxBowlerLimit?: number;
 }
 
 export interface UpdateLiveStatusDto {
@@ -59,6 +62,9 @@ export interface UpdateLiveStatusDto {
   lambiRed?: number;
   comment2?: string;
   comment3?: string;
+  ballsPerOver?: number;
+  oversPerInning?: number;
+  maxBowlerLimit?: number;
 }
 
 export interface SwitchTeamDto {

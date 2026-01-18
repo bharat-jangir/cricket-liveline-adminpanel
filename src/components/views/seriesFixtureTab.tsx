@@ -36,17 +36,16 @@ import { Match } from '../../types/match';
 import { Team } from '../../types/team';
 import { Venue } from '../../types/venue';
 import { toast } from 'sonner';
+import { FORMAT_CONFIG, type FormatSettings, type MatchFormat, type MatchStatus } from '../../utils/cricketUtils';
 
-// UI format types (for display)
-type MatchFormat = 'T20' | 'ODI' | 'Test';
-type MatchStatus = 'Scheduled' | 'Live' | 'Completed' | 'Abandoned';
 
-// Helper functions to map between UI and backend formats
-const mapFormatToBackend = (format: MatchFormat): 't20' | 'odi' | 'test' => {
+const mapFormatToBackend = (format: MatchFormat): 't20' | 'odi' | 'test' | 't10' | 'hundred' => {
     switch (format) {
         case 'T20': return 't20';
         case 'ODI': return 'odi';
         case 'Test': return 'test';
+        case 'T10': return 't10';
+        case 'The Hundred': return 'hundred';
         default: return 'odi';
     }
 };
@@ -57,6 +56,8 @@ const mapFormatFromBackend = (format: string): MatchFormat => {
         case 't20i': return 'T20';
         case 'odi': return 'ODI';
         case 'test': return 'Test';
+        case 't10': return 'T10';
+        case 'hundred': return 'The Hundred';
         default: return 'ODI';
     }
 };
@@ -391,6 +392,9 @@ export function SeriesFixtureTab() {
         try {
             setSaving(true);
             const matchNumber = newFixture.matchNumber || `${fixtures.length + 1}`;
+            const format = newFixture.format as MatchFormat;
+            const defaults = FORMAT_CONFIG[format] || FORMAT_CONFIG['ODI'];
+
             const payload = {
                 matchNumber,
                 title: newFixture.title,
@@ -398,7 +402,7 @@ export function SeriesFixtureTab() {
                 slug: MatchService.generateSlug(newFixture.title),
                 seriesId,
                 matchType: newFixture.matchType! as any,
-                matchFormat: mapFormatToBackend(newFixture.format as MatchFormat),
+                matchFormat: mapFormatToBackend(format),
                 totalInnings: newFixture.totalInnings!,
                 teamAId: newFixture.teamAId!,
                 teamBId: newFixture.teamBId!,
@@ -407,9 +411,10 @@ export function SeriesFixtureTab() {
                 matchTime: newFixture.matchTime ? new Date(newFixture.matchTime) : undefined,
                 status: mapStatusToBackend(newFixture.status as MatchStatus),
                 isFeatured: newFixture.isFeatured || false,
+                ballsPerOver: defaults.ballsPerOver,
+                oversPerInning: defaults.oversPerInning,
+                maxBowlerLimit: defaults.maxBowlerLimit,
             };
-
-
 
             const response = await MatchService.createMatch(payload);
 
@@ -418,7 +423,7 @@ export function SeriesFixtureTab() {
 
                 // Initialize live match data
                 try {
-                    // Create initial live status WITHOUT setting teams automatically
+                    // Create initial live status WITH defaults
                     await LiveMatchService.updateLiveStatus(newMatchId!, {
                         currentInning: 1,
                         currentOver: 0,
@@ -431,6 +436,9 @@ export function SeriesFixtureTab() {
                         requiredRunRate: 0,
                         target: 0,
                         ballsRemaining: 0,
+                        ballsPerOver: defaults.ballsPerOver,
+                        oversPerInning: defaults.oversPerInning,
+                        maxBowlerLimit: defaults.maxBowlerLimit,
                     });
 
                     console.log('Live match data initialized for match:', newMatchId);
@@ -552,6 +560,8 @@ export function SeriesFixtureTab() {
                                     <SelectItem value="ODI">ODI</SelectItem>
                                     <SelectItem value="T20">T20</SelectItem>
                                     <SelectItem value="Test">Test</SelectItem>
+                                    <SelectItem value="T10">T10</SelectItem>
+                                    <SelectItem value="The Hundred">The Hundred</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -751,6 +761,8 @@ export function SeriesFixtureTab() {
                                                         <SelectItem value="ODI">ODI</SelectItem>
                                                         <SelectItem value="T20">T20</SelectItem>
                                                         <SelectItem value="Test">Test</SelectItem>
+                                                        <SelectItem value="T10">T10</SelectItem>
+                                                        <SelectItem value="The Hundred">The Hundred</SelectItem>
                                                     </SelectContent>
                                                 </Select>
                                                 <Select

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -17,6 +17,7 @@ import SeriesPointsTab from './seriesPointsTab';
 import SeriesVenuesTab from './SeriesVenuesTab';
 import SeriesInfoTab from './SeriesInfoTab';
 import SeriesFantasyTab from './SeriesFantasyTab';
+import { SeriesService } from '../../services/series.service';
 
 export function SeriesDetailView() {
   const { seriesId, tab } = useParams();
@@ -28,8 +29,27 @@ export function SeriesDetailView() {
     navigate(`/series/${seriesId}/${value}`);
   };
 
-  // Series name would typically be fetched based on ID
-  const seriesName = "Indian Premier League 2024";
+  const [seriesName, setSeriesName] = useState<string>("Loading...");
+
+  useEffect(() => {
+    const fetchSeriesDetails = async () => {
+      if (seriesId) {
+        try {
+          const response = await SeriesService.getSeries(seriesId);
+          if (response.data?.result?.name) {
+            setSeriesName(response.data.result.name);
+          } else {
+            setSeriesName("Unknown Series");
+          }
+        } catch (error) {
+          console.error("Failed to fetch series details:", error);
+          setSeriesName("Error loading series");
+        }
+      }
+    };
+
+    fetchSeriesDetails();
+  }, [seriesId]);
 
   return (
     <Tabs

@@ -31,6 +31,10 @@ export interface MatchState {
     saving: boolean;
     loading: boolean;
     lastUpdated: number; // Timestamp to force refresh if needed
+
+    // Format Rules
+    ballsPerOver: number;
+    oversPerInning: number;
 }
 
 // Initial State
@@ -50,7 +54,9 @@ export const initialMatchState: MatchState = {
     bowlingTeamId: null,
     saving: false,
     loading: true,
-    lastUpdated: Date.now()
+    lastUpdated: Date.now(),
+    ballsPerOver: 6,
+    oversPerInning: 20
 };
 
 // Actions
@@ -75,9 +81,11 @@ export function matchReducer(state: MatchState, action: MatchAction): MatchState
             const runs = status.score?.split('/')[0] || "0";
             const wickets = status.score?.split('/')[1] || "0";
             const overs = status.overs || "0.0";
+            const ballsPerOver = status.ballsPerOver || 6;
+            const oversPerInning = status.oversPerInning || 20;
 
             // Calculate derived
-            const totalBalls = oversToBalls(overs);
+            const totalBalls = oversToBalls(overs, ballsPerOver);
             // ... (RR and Projected can be calculated here or in utils)
 
             return {
@@ -90,6 +98,8 @@ export function matchReducer(state: MatchState, action: MatchAction): MatchState
                 currentInning: String(status.currentInning || "1"),
                 batsmen: status.batsmen || [],
                 bowlers: status.bowlers || [],
+                ballsPerOver,
+                oversPerInning,
                 loading: false,
                 lastUpdated: Date.now()
             };
@@ -101,7 +111,7 @@ export function matchReducer(state: MatchState, action: MatchAction): MatchState
                 runs,
                 wickets,
                 overs,
-                ballsBowled: oversToBalls(overs)
+                ballsBowled: oversToBalls(overs, state.ballsPerOver)
             };
         }
         case 'UPDATE_CURRENT_BALL': {

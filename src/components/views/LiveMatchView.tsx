@@ -294,6 +294,8 @@ export function LiveMatchView() {
       thirdUmpire: "",
       referee: "",
       pitchReport: "",
+      ballsPerOver: matchData.ballsPerOver,
+      oversPerInning: matchData.oversPerInning,
     };
   }, [matchData, id]);
 
@@ -783,12 +785,14 @@ export function LiveMatchView() {
             )}
 
             {/* Live Tab */}
-            {activeTab === "live" && (
+            {activeTab === "live" && transformedMatchData && (
               <LiveMatchLiveTab
                 matchId={id || ''}
                 matchData={transformedMatchData}
                 matchFormat={matchData?.matchFormat}
                 liveStatus={liveStatus}
+                ballsPerOver={transformedMatchData.ballsPerOver}
+                oversPerInning={transformedMatchData.oversPerInning}
               />
             )}
 

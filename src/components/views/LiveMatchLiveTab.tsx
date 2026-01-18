@@ -91,9 +91,18 @@ interface LiveMatchLiveTabProps {
   };
   matchFormat?: 'test' | 'odi' | 't20' | 't20i';
   liveStatus?: any;
+  ballsPerOver?: number;
+  oversPerInning?: number;
 }
 
-export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: initialLiveStatus }: LiveMatchLiveTabProps) {
+export function LiveMatchLiveTab({
+  matchId,
+  matchData,
+  matchFormat,
+  liveStatus: initialLiveStatus,
+  ballsPerOver: propBallsPerOver,
+  oversPerInning: propOversPerInning
+}: LiveMatchLiveTabProps) {
   // Get team names - ensure we get the actual names from matchData
   const team1Name = matchData?.team1?.name || '';
   const team2Name = matchData?.team2?.name || '';
@@ -149,6 +158,8 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
   const [dls, setDls] = useState(false);
   const [noCommentry, setNoCommentry] = useState(false);
   const [onOC, setOnOC] = useState(false);
+  const [ballsPerOver, setBallsPerOver] = useState(propBallsPerOver || 6);
+  const [oversPerInning, setOversPerInning] = useState(propOversPerInning || 20);
 
   const initialStatus = useMemo(() => {
     const s = matchData?.status?.toLowerCase() || 'upcoming';
@@ -337,7 +348,8 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
               const oversParts = String(overs).split('.');
               const completedOvers = parseInt(oversParts[0]) || 0;
               const ballsInCurrentOver = parseInt(oversParts[1]) || 0;
-              const totalOvers = completedOvers + (ballsInCurrentOver / 6);
+              const bpo = ballsPerOver || 6;
+              const totalOvers = completedOvers + (ballsInCurrentOver / bpo);
 
               if (isNaN(r) || totalOvers <= 0) return "0.00";
               return (r / totalOvers).toFixed(2);
@@ -373,8 +385,9 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
     if (teamInnings.length > 0) {
       // For Test matches, there might be multiple innings
       const latestInning = teamInnings[teamInnings.length - 1];
-      const totalOvers = Math.floor(latestInning.totalBalls / 6);
-      const remainderBalls = latestInning.totalBalls % 6;
+      const bpo = ballsPerOver || 6;
+      const totalOvers = Math.floor(latestInning.totalBalls / bpo);
+      const remainderBalls = latestInning.totalBalls % bpo;
 
       return (
         <>
@@ -512,8 +525,11 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
         if (status.onOC !== undefined) setOnOC(status.onOC);
 
         // Load comments
-        if (status.comment2 !== undefined) setComment2(status.comment2);
         if (status.comment3 !== undefined) setCommentSV3SV4(status.comment3);
+
+        // Sync match parameters
+        if (status.ballsPerOver) setBallsPerOver(status.ballsPerOver);
+        if (status.oversPerInning) setOversPerInning(status.oversPerInning);
       } else {
         console.warn('Failed to load live status:', statusResponse);
       }
@@ -545,8 +561,9 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
             setWickets(String(scorecardData.inning.totalWickets));
           }
           if (scorecardData.inning.totalBalls !== undefined) {
-            const totalOvers = Math.floor(scorecardData.inning.totalBalls / 6);
-            const remainderBalls = scorecardData.inning.totalBalls % 6;
+            const bpo = latestStatus?.ballsPerOver || ballsPerOver || 6;
+            const totalOvers = Math.floor(scorecardData.inning.totalBalls / bpo);
+            const remainderBalls = scorecardData.inning.totalBalls % bpo;
             setOvers(`${totalOvers}.${remainderBalls}`);
           }
 
@@ -1078,7 +1095,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
   const [activeBall, setActiveBall] = useState<{ overIndex: number; ballIndex: number } | null>(null);
 
   // This Over State
-  const [thisOver, setThisOver] = useState(["0", "0", "0", "0", "0", "0"]);
+  const [thisOver, setThisOver] = useState<string[]>(Array(ballsPerOver || 6).fill("0"));
 
   const handleThisOverChange = (index: number, value: string) => {
     const newThisOver = [...thisOver];
@@ -1214,12 +1231,12 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
           };
 
           if (field === 'overs') {
-            const totalBalls = oversToBalls(value);
-            const completed = Math.floor(totalBalls / 6);
-            const balls = totalBalls % 6;
+            const totalBalls = oversToBalls(value, ballsPerOver);
+            const completed = Math.floor(totalBalls / ballsPerOver);
+            const balls = totalBalls % ballsPerOver;
             updateDto.completedOvers = completed;
             updateDto.balls = balls;
-            updateDto.overs = completed + balls / 6;
+            updateDto.overs = completed + balls / ballsPerOver;
           } else if (field === 'maidens') {
             updateDto.maidens = value === '' ? 0 : parseInt(value) || 0;
           } else if (field === 'runs') {
@@ -1926,7 +1943,7 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
 
       toast.success('This over updated and saved');
       // Reset this over
-      setThisOver(["0", "0", "0", "0", "0", "0"]);
+      setThisOver(Array(ballsPerOver || 6).fill("0"));
       setCurrentBall(String((parseInt(currentBall) || 0) + 1));
 
       // Reload over history

@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { toast } from "sonner";
+import { FORMAT_CONFIG, type MatchFormat } from "../../utils/cricketUtils";
 import { LiveMatchService, type MatchSquad } from "../../services/live-match.service";
 import { MatchService } from "../../services/match.service";
 import { SeriesTeamsService } from "../../services/series-teams.service";
@@ -58,6 +59,8 @@ interface MatchData {
   pitchReport?: string;
   venueId?: string;
   venueObj?: Venue;
+  ballsPerOver?: number;
+  oversPerInning?: number;
 }
 
 interface Player {
@@ -91,6 +94,8 @@ interface LiveMatchInfoTabProps {
   team2Id?: string;
   seriesId?: string;
   matchFormat?: string;
+  ballsPerOver?: number;
+  oversPerInning?: number;
 }
 
 export function LiveMatchInfoTab({
@@ -100,6 +105,8 @@ export function LiveMatchInfoTab({
   team2Id,
   seriesId,
   matchFormat,
+  ballsPerOver: propBallsPerOver,
+  oversPerInning: propOversPerInning,
 }: LiveMatchInfoTabProps) {
   // Debug: Log matchData to see what we're receiving
   useEffect(() => {
@@ -136,6 +143,33 @@ export function LiveMatchInfoTab({
   const [referee, setReferee] = useState("");
   const [pitchReport, setPitchReport] = useState("");
   const [selectedVenueId, setSelectedVenueId] = useState("");
+  const [ballsPerOver, setBallsPerOver] = useState<string>("6");
+  const [oversPerInning, setOversPerInning] = useState<string>("20");
+  const [maxBowlerLimit, setMaxBowlerLimit] = useState<string>("0");
+  const [localMatchFormat, setLocalMatchFormat] = useState<string>(matchFormat || "odi");
+
+  const handleFormatChange = (format: string) => {
+    setLocalMatchFormat(format);
+
+    // Map backend format to UI format for config lookup
+    const formatMap: Record<string, string> = {
+      't20': 'T20',
+      'odi': 'ODI',
+      'test': 'Test',
+      't10': 'T10',
+      'hundred': 'The Hundred'
+    };
+
+    const uiFormat = formatMap[format.toLowerCase()] || 'ODI';
+    const defaults = FORMAT_CONFIG[uiFormat];
+
+    if (defaults) {
+      setBallsPerOver(String(defaults.ballsPerOver));
+      setOversPerInning(String(defaults.oversPerInning));
+      setMaxBowlerLimit(String(defaults.maxBowlerLimit));
+      toast.info(`Applied defaults for ${uiFormat}`);
+    }
+  };
 
   // Debounce team1 search
   useEffect(() => {
@@ -374,6 +408,10 @@ export function LiveMatchInfoTab({
           if (data.venueId) {
             setSelectedVenueId(typeof data.venueId === 'string' ? data.venueId : data.venueId._id);
           }
+          if (data.ballsPerOver) setBallsPerOver(String(data.ballsPerOver));
+          if (data.oversPerInning) setOversPerInning(String(data.oversPerInning));
+          if (data.maxBowlerLimit) setMaxBowlerLimit(String(data.maxBowlerLimit));
+          if (data.matchFormat) setLocalMatchFormat(data.matchFormat.toLowerCase());
         }
         initialDetailsLoadDone.current = true;
       } catch (error) {
@@ -645,6 +683,10 @@ export function LiveMatchInfoTab({
           team1Form: teamFormBangladesh || undefined,
           team2Form: teamFormIndia || undefined,
         },
+        ballsPerOver: parseInt(ballsPerOver) || 6,
+        oversPerInning: parseInt(oversPerInning) || 20,
+        maxBowlerLimit: parseInt(maxBowlerLimit) || 0,
+        matchFormat: localMatchFormat,
       };
 
       if (selectedVenueId) {
@@ -947,6 +989,66 @@ export function LiveMatchInfoTab({
                   <SelectItem value="seaming">Seaming</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Match Format
+              </Label>
+              <Select value={localMatchFormat} onValueChange={handleFormatChange}>
+                <SelectTrigger className="bg-white dark:bg-slate-700">
+                  <SelectValue placeholder="Select format" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="test">Test</SelectItem>
+                  <SelectItem value="odi">ODI</SelectItem>
+                  <SelectItem value="t20">T20</SelectItem>
+                  <SelectItem value="t10">T10</SelectItem>
+                  <SelectItem value="hundred">The Hundred</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-2">
+                <Label className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                  Balls/Over
+                </Label>
+                <Select value={ballsPerOver} onValueChange={setBallsPerOver}>
+                  <SelectTrigger className="bg-white dark:bg-slate-700 text-xs h-9">
+                    <SelectValue placeholder="BPO" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="6">6 Balls</SelectItem>
+                    <SelectItem value="5">5 Balls</SelectItem>
+                    <SelectItem value="8">8 Balls</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                  Overs/Inn
+                </Label>
+                <Input
+                  type="number"
+                  placeholder="20"
+                  value={oversPerInning}
+                  onChange={(e) => setOversPerInning(e.target.value)}
+                  className="bg-white dark:bg-slate-700 h-9 text-xs"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                  Max/Bowler
+                </Label>
+                <Input
+                  type="number"
+                  placeholder="4"
+                  value={maxBowlerLimit}
+                  onChange={(e) => setMaxBowlerLimit(e.target.value)}
+                  className="bg-white dark:bg-slate-700 h-9 text-xs"
+                />
+              </div>
             </div>
 
             {/* Head to Head Section */}
