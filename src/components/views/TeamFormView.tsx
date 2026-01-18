@@ -17,7 +17,7 @@ import {
 } from "../ui/select";
 import { ImageUpload } from "../ui/ImageUpload";
 import { RichTextEditor } from "../ui/RichTextEditor";
-import { Team } from "../../types";
+import { Team, Formats, Captains } from "../../types/team";
 import { TeamService } from "../../services/team.service";
 import { toast } from "sonner";
 
@@ -33,13 +33,12 @@ export function TeamFormView() {
   const navigate = useNavigate();
   const isEdit = !!id;
 
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [selectedLanguage, setSelectedLanguage] = useState('en');
   const [activeLanguageTab, setActiveLanguageTab] = useState('en');
   const [jerseyTab, setJerseyTab] = useState<'limited' | 'test'>('limited');
-  
+
   const [flagPreview, setFlagPreview] = useState<string | null>(null);
   const [jerseyLimitedPreview, setJerseyLimitedPreview] = useState<string | null>(null);
   const [jerseyTestPreview, setJerseyTestPreview] = useState<string | null>(null);
@@ -62,7 +61,7 @@ export function TeamFormView() {
 
   // Additional form state for new fields
   const [bio, setBio] = useState('');
-  const [formats, setFormats] = useState({
+  const [formats, setFormats] = useState<Formats>({
     t20: false,
     odi: false,
     test: false,
@@ -72,7 +71,7 @@ export function TeamFormView() {
   const [teamType, setTeamType] = useState<'international' | 'domestic' | 'league'>('international');
   const [gender, setGender] = useState<'men' | 'women'>('men');
   const [seriesType, setSeriesType] = useState('');
-  const [captains, setCaptains] = useState({
+  const [captains, setCaptains] = useState<Captains>({
     odi: '',
     t20: '',
     t10: '',
@@ -105,9 +104,8 @@ export function TeamFormView() {
 
   const loadTeam = async () => {
     try {
-      setLoading(true);
       const response = await TeamService.getTeam(id!);
-      
+
       if (response.status) {
         const team = response.data.result;
         setFormData(team);
@@ -136,7 +134,7 @@ export function TeamFormView() {
         setActiveTo(team.activeTo ? new Date(team.activeTo).toISOString().split('T')[0] : '');
         setTournamentsWon(team.tournamentsWon || '');
         setTournamentsCaptains(team.tournamentsCaptains || '');
-        
+
         // Handle translations - merge with existing languageData structure
         const translations = team.translations || {};
         setLanguageData({
@@ -157,7 +155,7 @@ export function TeamFormView() {
             fantasyName: translations.te?.fantasyName || '',
           },
         });
-        
+
         if (team.logo) setFlagPreview(team.logo);
         if (team.jerseyLimited) setJerseyLimitedPreview(team.jerseyLimited);
         if (team.jerseyTest) setJerseyTestPreview(team.jerseyTest);
@@ -166,7 +164,7 @@ export function TeamFormView() {
       toast.error(error.response?.data?.userMessage || 'Failed to load team');
       navigate('/teams');
     } finally {
-      setLoading(false);
+      // Done loading
     }
   };
 
@@ -192,27 +190,27 @@ export function TeamFormView() {
   // Clean form data utility to remove unwanted fields
   const cleanFormData = (data: any): any => {
     const cleanedData = { ...data };
-    
+
     // Remove MongoDB specific fields
     delete cleanedData._id;
     delete cleanedData.__v;
     delete cleanedData.createdAt;
     delete cleanedData.updatedAt;
-    
+
     // Recursively clean nested objects and convert empty strings to undefined
     Object.keys(cleanedData).forEach(key => {
       // Convert empty strings to undefined
       if (cleanedData[key] === '') {
         cleanedData[key] = undefined;
       }
-      
+
       // Clean nested objects
       if (cleanedData[key] && typeof cleanedData[key] === 'object' && !Array.isArray(cleanedData[key])) {
         if (cleanedData[key]._id) delete cleanedData[key]._id;
         if (cleanedData[key].__v) delete cleanedData[key].__v;
         if (cleanedData[key].createdAt) delete cleanedData[key].createdAt;
         if (cleanedData[key].updatedAt) delete cleanedData[key].updatedAt;
-        
+
         // Clean empty strings in nested objects (like captains)
         Object.keys(cleanedData[key]).forEach(nestedKey => {
           if (cleanedData[key][nestedKey] === '') {
@@ -221,7 +219,7 @@ export function TeamFormView() {
         });
       }
     });
-    
+
     return cleanedData;
   };
 
@@ -263,7 +261,7 @@ export function TeamFormView() {
 
     // Clean the data but preserve translations
     const cleanedData = cleanFormData(teamData);
-    
+
     // Ensure translations are included (cleanFormData might affect it)
     if (languageData) {
       cleanedData.translations = languageData;
@@ -273,7 +271,7 @@ export function TeamFormView() {
 
     try {
       setSaving(true);
-      
+
       if (isEdit) {
         const response = await TeamService.updateTeam(id!, cleanedData);
         if (response.status) {
@@ -370,7 +368,7 @@ export function TeamFormView() {
           <div className="lg:col-span-2">
             <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
               <CardContent className="p-6 space-y-8">
-                
+
                 {/* Flag Preview and Firebase Data */}
                 <div>
                   <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Team Flag & Identity</h3>
@@ -381,7 +379,7 @@ export function TeamFormView() {
                       <div className="mt-2">
                         <ImageUpload
                           value={flagPreview || undefined}
-                          onChange={(file, preview) => setFlagPreview(preview)}
+                          onChange={(_file, preview) => setFlagPreview(preview)}
                           label=""
                         />
                       </div>
@@ -944,7 +942,7 @@ export function TeamFormView() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Jersey Type Tabs */}
-                <Tabs value={jerseyTab} onValueChange={(v) => setJerseyTab(v as 'limited' | 'test')}>
+                <Tabs value={jerseyTab} onValueChange={(v: any) => setJerseyTab(v as 'limited' | 'test')}>
                   <TabsList className="w-full bg-slate-100 dark:bg-slate-900">
                     <TabsTrigger value="limited" className="flex-1">Limited</TabsTrigger>
                     <TabsTrigger value="test" className="flex-1">Test</TabsTrigger>
@@ -962,16 +960,15 @@ export function TeamFormView() {
                         <div className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-600 rounded-lg bg-slate-900/50">
                           <div className="w-32 flex flex-col items-center">
                             {/* Player Head */}
-                            <img 
-                              src="/src/assets/player/1BJ.webp" 
-                              alt="Player" 
-                              className="w-32 h-32 object-cover rounded-full"
-                              className="-mb-[35px]"
+                            <img
+                              src="/src/assets/player/1BJ.webp"
+                              alt="Player"
+                              className="w-32 h-32 -mb-[35px] object-cover rounded-full"
                             />
                             {/* Jersey/T-shirt */}
-                            <img 
-                              src="/src/assets/player/limited-jersey.png" 
-                              alt="Limited Jersey" 
+                            <img
+                              src="/src/assets/player/limited-jersey.png"
+                              alt="Limited Jersey"
                               className="w-28 h-28 object-contain -mt-3"
                             />
                           </div>
@@ -993,16 +990,15 @@ export function TeamFormView() {
                         <div className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-600 rounded-lg bg-slate-900/50">
                           <div className="w-32 flex flex-col items-center">
                             {/* Player Head */}
-                            <img 
-                              src="/src/assets/player/1BJ.webp" 
-                              alt="Player" 
-                              className="w-32 h-32 object-cover rounded-full"
-                              className="-mb-[35px]"
+                            <img
+                              src="/src/assets/player/1BJ.webp"
+                              alt="Player"
+                              className="w-32 h-32 -mb-[35px] object-cover rounded-full"
                             />
                             {/* Jersey/T-shirt */}
-                            <img 
-                              src="/src/assets/player/test-jersey.png" 
-                              alt="Test Jersey" 
+                            <img
+                              src="/src/assets/player/test-jersey.png"
+                              alt="Test Jersey"
                               className="w-28 h-28 object-contain -mt-3"
                             />
                           </div>

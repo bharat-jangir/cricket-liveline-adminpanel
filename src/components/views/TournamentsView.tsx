@@ -71,7 +71,7 @@ function FormDialog({
 interface Tournament {
   id: number;
   name: string;
-  format: 'ODI' | 'T20' | 'Test';
+  format: 'ODI' | 'T20' | 'Test' | 'T10' | '100B';
   status: 'Live' | 'Upcoming' | 'Completed';
   startDate: string;
   endDate: string;
@@ -95,7 +95,7 @@ export function TournamentsView() {
     }, 500);
     return () => clearTimeout(timer);
   }, [searchTerm]);
-  
+
   // Form State
   const [formData, setFormData] = useState<Omit<Tournament, 'id'>>({
     name: '',
@@ -184,7 +184,7 @@ export function TournamentsView() {
     }, 500);
   };
 
-  const filteredTournaments = tournaments.filter(t => 
+  const filteredTournaments = tournaments.filter(t =>
     t.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -219,19 +219,21 @@ export function TournamentsView() {
                   </div>
                   <div>
                     <h3 className="text-white mb-1">{tournament.name}</h3>
-                    <Badge 
+                    <Badge
                       variant="outline"
                       className={
                         tournament.format === 'Test' ? 'border-red-500 text-red-400' :
-                        tournament.format === 'ODI' ? 'border-blue-500 text-blue-400' :
-                        'border-purple-500 text-purple-400'
+                          tournament.format === 'ODI' ? 'border-blue-500 text-blue-400' :
+                            tournament.format === 'T10' ? 'border-yellow-500 text-yellow-400' :
+                              tournament.format === '100B' ? 'border-green-500 text-green-400' :
+                                'border-purple-500 text-purple-400'
                       }
                     >
                       {tournament.format}
                     </Badge>
                   </div>
                 </div>
-                <Badge 
+                <Badge
                   variant={tournament.status === 'Live' ? 'destructive' : 'secondary'}
                   className={tournament.status === 'Live' ? 'animate-pulse' : ''}
                 >
@@ -257,15 +259,15 @@ export function TournamentsView() {
               </div>
 
               <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="flex-1 border-slate-700 text-white hover:bg-slate-700"
                 >
                   <Trophy className="size-4 mr-2" />
                   Points Table
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
                   className="border-slate-700 text-white hover:bg-slate-700"
                   onClick={() => handleEdit(tournament)}
@@ -300,13 +302,13 @@ export function TournamentsView() {
               required
             />
           </div>
-          
+
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="format" className="text-right text-slate-300">
               Format
             </Label>
-            <Select 
-              value={formData.format} 
+            <Select
+              value={formData.format}
               onValueChange={(value: any) => setFormData({ ...formData, format: value })}
             >
               <SelectTrigger className="col-span-3 bg-slate-900 border-slate-700 text-white">
@@ -316,6 +318,8 @@ export function TournamentsView() {
                 <SelectItem value="T20">T20</SelectItem>
                 <SelectItem value="ODI">ODI</SelectItem>
                 <SelectItem value="Test">Test</SelectItem>
+                <SelectItem value="T10">T10</SelectItem>
+                <SelectItem value="100B">100B</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -324,8 +328,8 @@ export function TournamentsView() {
             <Label htmlFor="status" className="text-right text-slate-300">
               Status
             </Label>
-            <Select 
-              value={formData.status} 
+            <Select
+              value={formData.status}
               onValueChange={(value: any) => setFormData({ ...formData, status: value })}
             >
               <SelectTrigger className="col-span-3 bg-slate-900 border-slate-700 text-white">
@@ -358,7 +362,7 @@ export function TournamentsView() {
                 <Calendar
                   mode="single"
                   selected={new Date(formData.startDate)}
-                  onSelect={(date) => date && setFormData({ ...formData, startDate: date.toISOString() })}
+                  onSelect={(date: any) => date && setFormData({ ...formData, startDate: date.toISOString() })}
                   initialFocus
                   className="text-white"
                 />
@@ -385,7 +389,7 @@ export function TournamentsView() {
                 <Calendar
                   mode="single"
                   selected={new Date(formData.endDate)}
-                  onSelect={(date) => date && setFormData({ ...formData, endDate: date.toISOString() })}
+                  onSelect={(date: any) => date && setFormData({ ...formData, endDate: date.toISOString() })}
                   initialFocus
                   className="text-white"
                 />
@@ -435,7 +439,7 @@ export function TournamentsView() {
             />
           </div>
 
-           <div className="grid grid-cols-4 items-center gap-4">
+          <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="logo" className="text-right text-slate-300">
               Logo (Emoji)
             </Label>

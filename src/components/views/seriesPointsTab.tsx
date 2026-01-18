@@ -21,7 +21,7 @@ import type { SeriesTeam } from '../../types/series-teams';
 
 // --- Type Definitions ---
 
-type MatchFormat = 'T20' | 'ODI' | 'Test';
+type MatchFormat = 'T20' | 'ODI' | 'Test' | 'T10' | '100B';
 
 interface PointsTableEntry {
     _id?: string;
@@ -62,14 +62,19 @@ const mapFormatToFrontend = (format?: string): MatchFormat => {
     if (upper === 'T20' || upper === 'T20I') return 'T20';
     if (upper === 'ODI') return 'ODI';
     if (upper === 'TEST') return 'Test';
+    if (upper === 'T10') return 'T10';
+    if (upper === 'HUNDRED' || upper === '100B') return '100B';
     return 'ODI';
 };
 
 // Helper function to map frontend format to backend format
-const mapFormatToBackend = (format: MatchFormat): 'test' | 'odi' | 't20' | 't20i' => {
-    if (format === 'T20') return 't20';
-    if (format === 'ODI') return 'odi';
-    if (format === 'Test') return 'test';
+const mapFormatToBackend = (format: MatchFormat): 'test' | 'odi' | 't20' | 't20i' | 't10' | 'hundred' => {
+    const upper = format.toUpperCase();
+    if (upper === 'T20') return 't20';
+    if (upper === 'ODI') return 'odi';
+    if (upper === 'TEST') return 'test';
+    if (upper === 'T10') return 't10';
+    if (upper === '100B') return 'hundred';
     return 'odi';
 };
 
@@ -105,19 +110,19 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
         try {
             setLoading(true);
             const response = await PointsTableService.getPointsTables(seriesId, { limit: 1000 });
-            
+
             if (response.status && response.data?.result) {
                 const entries = (response.data.result as BackendEntry[]).filter(entry => entry !== null && entry !== undefined);
-                
+
                 if (entries.length === 0) {
                     setPointsTables([]);
                     return;
                 }
-                
+
                 // Group entries by format and groupName
                 const grouped: Record<string, PointsTable> = {};
-                
-                entries.forEach((entry) => {
+
+                (entries as any[]).forEach((entry) => {
                     // Skip only if entry itself is null/undefined
                     if (!entry) {
                         console.warn('Skipping null entry');
@@ -126,7 +131,7 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
 
                     const format = mapFormatToFrontend(entry.matchFormat);
                     const groupKey = `${format}-${entry.groupName || 'default'}`;
-                    
+
                     if (!grouped[groupKey]) {
                         grouped[groupKey] = {
                             id: groupKey,
@@ -135,14 +140,14 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                             entries: [],
                         };
                     }
-                    
+
                     // Extract teamId - handle both populated object, string/ObjectId, or null
                     let teamIdString: string = '';
                     if (entry.teamId) {
                         if (typeof entry.teamId === 'object' && entry.teamId !== null) {
-                            teamIdString = entry.teamId._id?.toString() || entry.teamId.toString();
+                            teamIdString = (entry.teamId as any)._id?.toString() || (entry.teamId as any).toString();
                         } else {
-                            teamIdString = entry.teamId.toString();
+                            teamIdString = String(entry.teamId);
                         }
                     } else {
                         // If teamId is null, use teamFkey as identifier or generate a placeholder
@@ -153,12 +158,12 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                     let seriesIdString: string = seriesId || '';
                     if (entry.seriesId) {
                         if (typeof entry.seriesId === 'object' && entry.seriesId !== null) {
-                            seriesIdString = entry.seriesId._id?.toString() || entry.seriesId.toString();
+                            seriesIdString = (entry.seriesId as any)._id?.toString() || (entry.seriesId as any).toString();
                         } else {
-                            seriesIdString = entry.seriesId.toString();
+                            seriesIdString = String(entry.seriesId);
                         }
                     }
-                    
+
                     // Get team name - use teamFkey if team is not populated
                     let teamName = 'Unknown';
                     if (entry.team) {
@@ -167,7 +172,7 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                         // Use teamFkey as team name if team is not populated
                         teamName = entry.teamFkey;
                     }
-                    
+
                     const displayEntry: PointsTableEntry = {
                         _id: entry._id,
                         srNo: entry.position || 0,
@@ -186,15 +191,15 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                         nrr: entry.netRunRate || 0,
                         q: entry.qualify || false,
                     };
-                    
+
                     grouped[groupKey].entries.push(displayEntry);
                 });
-                
+
                 // Sort entries by position within each group
                 Object.values(grouped).forEach(table => {
                     table.entries.sort((a, b) => a.srNo - b.srNo);
                 });
-                
+
                 setPointsTables(Object.values(grouped));
             } else {
                 setPointsTables([]);
@@ -252,6 +257,8 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
             case 'Test': return 'outline';
             case 'ODI': return 'default';
             case 'T20': return 'secondary';
+            case 'T10': return 'default';
+            case '100B': return 'destructive';
             default: return 'default';
         }
     };
@@ -377,12 +384,12 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
         }
 
         // Ensure teamIds are strings, not objects
-        const teamIdStrings = teamIds.map(id => {
+        const teamIdStrings = teamIds.map((id: any) => {
             if (typeof id === 'string') {
                 return id;
             }
             if (typeof id === 'object' && id !== null) {
-                return id._id?.toString() || id.toString();
+                return (id as any)._id?.toString() || (id as any).toString();
             }
             return String(id);
         }).filter(id => id && id.length > 0);
@@ -451,7 +458,7 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                             <Loader2 className='h-6 w-6 animate-spin' />
                         </div>
                     ) : (
-                        (['ODI', 'T20', 'Test'] as MatchFormat[]).map((format) => {
+                        (['ODI', 'T20', 'Test', 'T10', '100B'] as MatchFormat[]).map((format) => {
                             const formatTables = tablesByFormat[format] || [];
                             if (formatTables.length === 0) return null;
 
@@ -479,9 +486,9 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                                                         <Button variant='outline' size='sm' onClick={handleCancelEdit} disabled={saving}>
                                                             Cancel
                                                         </Button>
-                                                        <Button 
-                                                            variant='default' 
-                                                            size='sm' 
+                                                        <Button
+                                                            variant='default'
+                                                            size='sm'
                                                             onClick={() => handleSaveTable(table)}
                                                             disabled={saving}
                                                         >
@@ -531,106 +538,106 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                                                                 <TableCell className='text-center'>{entry.teamFkey}</TableCell>
                                                                 <TableCell className='text-center'>
                                                                     {editingTableId === table.id ? (
-                                                                        <input 
-                                                                            type="number" 
-                                                                            value={entry.p || ''} 
+                                                                        <input
+                                                                            type="number"
+                                                                            value={entry.p || ''}
                                                                             onChange={(e) => {
                                                                                 const val = e.target.value === '' ? 0 : Number(e.target.value);
                                                                                 handleFieldChange(table.id, entry._id!, 'p', val);
-                                                                            }} 
-                                                                            className='w-full text-center border rounded px-1 py-0.5' 
+                                                                            }}
+                                                                            className='w-full text-center border rounded px-1 py-0.5'
                                                                         />
                                                                     ) : entry.p}
                                                                 </TableCell>
                                                                 <TableCell className='text-center text-green-600 font-medium'>
                                                                     {editingTableId === table.id ? (
-                                                                        <input 
-                                                                            type="number" 
-                                                                            value={entry.w || ''} 
+                                                                        <input
+                                                                            type="number"
+                                                                            value={entry.w || ''}
                                                                             onChange={(e) => {
                                                                                 const val = e.target.value === '' ? 0 : Number(e.target.value);
                                                                                 handleFieldChange(table.id, entry._id!, 'w', val);
-                                                                            }} 
-                                                                            className='w-full text-center border rounded px-1 py-0.5 text-green-600 font-medium' 
+                                                                            }}
+                                                                            className='w-full text-center border rounded px-1 py-0.5 text-green-600 font-medium'
                                                                         />
                                                                     ) : entry.w}
                                                                 </TableCell>
                                                                 <TableCell className='text-center text-red-600 font-medium'>
                                                                     {editingTableId === table.id ? (
-                                                                        <input 
-                                                                            type="number" 
-                                                                            value={entry.l || ''} 
+                                                                        <input
+                                                                            type="number"
+                                                                            value={entry.l || ''}
                                                                             onChange={(e) => {
                                                                                 const val = e.target.value === '' ? 0 : Number(e.target.value);
                                                                                 handleFieldChange(table.id, entry._id!, 'l', val);
-                                                                            }} 
-                                                                            className='w-full text-center border rounded px-1 py-0.5 text-red-600 font-medium' 
+                                                                            }}
+                                                                            className='w-full text-center border rounded px-1 py-0.5 text-red-600 font-medium'
                                                                         />
                                                                     ) : entry.l}
                                                                 </TableCell>
                                                                 <TableCell className='text-center'>
                                                                     {editingTableId === table.id ? (
-                                                                        <input 
-                                                                            type="number" 
-                                                                            value={entry.nr || ''} 
+                                                                        <input
+                                                                            type="number"
+                                                                            value={entry.nr || ''}
                                                                             onChange={(e) => {
                                                                                 const val = e.target.value === '' ? 0 : Number(e.target.value);
                                                                                 handleFieldChange(table.id, entry._id!, 'nr', val);
-                                                                            }} 
-                                                                            className='w-full text-center border rounded px-1 py-0.5' 
+                                                                            }}
+                                                                            className='w-full text-center border rounded px-1 py-0.5'
                                                                         />
                                                                     ) : entry.nr}
                                                                 </TableCell>
                                                                 <TableCell className='text-center'>
                                                                     {editingTableId === table.id ? (
-                                                                        <input 
-                                                                            type="number" 
-                                                                            value={entry.draw || ''} 
+                                                                        <input
+                                                                            type="number"
+                                                                            value={entry.draw || ''}
                                                                             onChange={(e) => {
                                                                                 const val = e.target.value === '' ? 0 : Number(e.target.value);
                                                                                 handleFieldChange(table.id, entry._id!, 'draw', val);
-                                                                            }} 
-                                                                            className='w-full text-center border rounded px-1 py-0.5' 
+                                                                            }}
+                                                                            className='w-full text-center border rounded px-1 py-0.5'
                                                                         />
                                                                     ) : entry.draw}
                                                                 </TableCell>
                                                                 <TableCell className='text-center'>
                                                                     {editingTableId === table.id ? (
-                                                                        <input 
-                                                                            type="number" 
-                                                                            value={entry.tm || ''} 
+                                                                        <input
+                                                                            type="number"
+                                                                            value={entry.tm || ''}
                                                                             onChange={(e) => {
                                                                                 const val = e.target.value === '' ? 0 : Number(e.target.value);
                                                                                 handleFieldChange(table.id, entry._id!, 'tm', val);
-                                                                            }} 
-                                                                            className='w-full text-center border rounded px-1 py-0.5' 
+                                                                            }}
+                                                                            className='w-full text-center border rounded px-1 py-0.5'
                                                                         />
                                                                     ) : entry.tm}
                                                                 </TableCell>
                                                                 <TableCell className='text-center font-bold'>
                                                                     {editingTableId === table.id ? (
-                                                                        <input 
-                                                                            type="number" 
-                                                                            value={entry.points || ''} 
+                                                                        <input
+                                                                            type="number"
+                                                                            value={entry.points || ''}
                                                                             onChange={(e) => {
                                                                                 const val = e.target.value === '' ? 0 : Number(e.target.value);
                                                                                 handleFieldChange(table.id, entry._id!, 'points', val);
-                                                                            }} 
-                                                                            className='w-full text-center border rounded px-1 py-0.5 font-bold' 
+                                                                            }}
+                                                                            className='w-full text-center border rounded px-1 py-0.5 font-bold'
                                                                         />
                                                                     ) : entry.points}
                                                                 </TableCell>
                                                                 <TableCell className={`text-center font-medium ${entry.nrr > 0 ? 'text-green-600' : entry.nrr < 0 ? 'text-red-600' : 'text-slate-900 dark:text-slate-100'}`}>
                                                                     {editingTableId === table.id ? (
-                                                                        <input 
-                                                                            type="number" 
-                                                                            step="0.01" 
-                                                                            value={entry.nrr || ''} 
+                                                                        <input
+                                                                            type="number"
+                                                                            step="0.01"
+                                                                            value={entry.nrr || ''}
                                                                             onChange={(e) => {
                                                                                 const val = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0;
                                                                                 handleFieldChange(table.id, entry._id!, 'nrr', val);
-                                                                            }} 
-                                                                            className={`w-full text-center border rounded px-1 py-0.5 font-medium ${entry.nrr > 0 ? 'text-green-600' : entry.nrr < 0 ? 'text-red-600' : 'text-slate-900 dark:text-slate-100'}`} 
+                                                                            }}
+                                                                            className={`w-full text-center border rounded px-1 py-0.5 font-medium ${entry.nrr > 0 ? 'text-green-600' : entry.nrr < 0 ? 'text-red-600' : 'text-slate-900 dark:text-slate-100'}`}
                                                                         />
                                                                     ) : <>{entry.nrr > 0 ? '+' : ''}{entry.nrr.toFixed(2)}</>}
                                                                 </TableCell>
@@ -639,7 +646,7 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                                                                         <div className="flex justify-center">
                                                                             <Checkbox
                                                                                 checked={entry.q}
-                                                                                onCheckedChange={(checked) => handleFieldChange(table.id, entry._id!, 'q', checked)}
+                                                                                onCheckedChange={(checked: boolean) => handleFieldChange(table.id, entry._id!, 'q', checked)}
                                                                             />
                                                                         </div>
                                                                     ) : (
@@ -649,9 +656,9 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                                                                 <TableCell className='text-center'>
                                                                     <div className='flex gap-1 justify-center'>
                                                                         {editingTableId === table.id && (
-                                                                            <Button 
-                                                                                variant='ghost' 
-                                                                                size='sm' 
+                                                                            <Button
+                                                                                variant='ghost'
+                                                                                size='sm'
                                                                                 onClick={() => handleDeleteEntry(entry._id!)}
                                                                                 disabled={saving}
                                                                             >
@@ -699,7 +706,7 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                             <div className='space-y-3'>
                                 <label className='text-sm font-medium leading-none'>Select Formats</label>
                                 <div className='flex flex-wrap gap-4'>
-                                    {['ODI', 'T20', 'Test'].map((format) => (
+                                    {['ODI', 'T20', 'Test', 'T10', '100B'].map((format) => (
                                         <div key={format} className="flex items-center space-x-2">
                                             <Checkbox
                                                 id={`format-${format}`}
@@ -808,7 +815,7 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                             <div className='space-y-3'>
                                 <label className='text-sm font-medium leading-none'>Select Formats</label>
                                 <div className='flex flex-wrap gap-4'>
-                                    {['ODI', 'T20', 'Test'].map((format) => (
+                                    {['ODI', 'T20', 'Test', 'T10', '100B'].map((format) => (
                                         <div key={format} className="flex items-center space-x-2">
                                             <Checkbox
                                                 id={`multi-format-${format}`}
@@ -834,12 +841,12 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                                     onValueChange={(value) => {
                                         if (value) {
                                             // Ensure we're storing the teamId as a string
-                                            const teamIdString = typeof value === 'string' 
-                                                ? value 
-                                                : (typeof value === 'object' && value !== null 
-                                                    ? value._id?.toString() || value.toString() 
+                                            const teamIdString = typeof value === 'string'
+                                                ? value
+                                                : (typeof value === 'object' && value !== null
+                                                    ? value._id?.toString() || value.toString()
                                                     : String(value));
-                                            
+
                                             if (teamIdString && !multiSelectedTeamIds.includes(teamIdString)) {
                                                 setMultiSelectedTeamIds([...multiSelectedTeamIds, teamIdString]);
                                             }
@@ -853,16 +860,16 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                                     <SelectContent>
                                         {availableTeams
                                             .filter(team => {
-                                                const teamId = typeof team.teamId === 'string' 
-                                                    ? team.teamId 
+                                                const teamId = typeof team.teamId === 'string'
+                                                    ? team.teamId
                                                     : (typeof team.teamId === 'object' && team.teamId !== null
                                                         ? team.teamId._id?.toString() || team.teamId.toString()
                                                         : String(team.teamId));
                                                 return !multiSelectedTeamIds.includes(teamId);
                                             })
                                             .map((team) => {
-                                                const teamId = typeof team.teamId === 'string' 
-                                                    ? team.teamId 
+                                                const teamId = typeof team.teamId === 'string'
+                                                    ? team.teamId
                                                     : (typeof team.teamId === 'object' && team.teamId !== null
                                                         ? team.teamId._id?.toString() || team.teamId.toString()
                                                         : String(team.teamId));

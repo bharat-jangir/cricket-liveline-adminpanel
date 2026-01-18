@@ -12,7 +12,7 @@ export interface PointsTableEntry {
     code?: string;
     logo?: string;
   };
-  matchFormat?: 'test' | 'odi' | 't20' | 't20i';
+  matchFormat?: 'test' | 'odi' | 't20' | 't20i' | 't10' | 'hundred';
   groupName?: string;
   position: number;
   played: number;
@@ -38,7 +38,7 @@ export interface PointsTableGroup {
 
 export interface CreatePointsTableEntryDto {
   teamId: string;
-  matchFormat?: 'test' | 'odi' | 't20' | 't20i';
+  matchFormat?: 'test' | 'odi' | 't20' | 't20i' | 't10' | 'hundred';
   groupName?: string;
   position: number;
   played?: number;
@@ -62,7 +62,7 @@ export interface UpdatePointsTableEntryDto extends Partial<CreatePointsTableEntr
 
 export interface CreatePointsTableGroupDto {
   groupName: string;
-  formats: ('test' | 'odi' | 't20' | 't20i')[];
+  formats: ('test' | 'odi' | 't20' | 't20i' | 't10' | 'hundred')[];
   teamIds: string[];
   updateMode?: 'auto' | 'manual';
 }
@@ -73,7 +73,7 @@ export interface BulkUpdatePointsTableDto {
 
 export interface QueryPointsTableDto {
   seriesId?: string;
-  matchFormat?: 'test' | 'odi' | 't20' | 't20i';
+  matchFormat?: 'test' | 'odi' | 't20' | 't20i' | 't10' | 'hundred';
   groupName?: string;
   teamId?: string;
   page?: number;
