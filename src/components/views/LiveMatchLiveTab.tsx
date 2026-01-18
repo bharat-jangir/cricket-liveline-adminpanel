@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { LiveMatchService, type LiveMatchStatus, type Scorecard, type BattingScorecard, type BowlingScorecard, type UpdateBatsmanDto, type UpdateBowlerDto, type UpdateTossDto, type Inning } from "../../services/live-match.service";
 import { MatchService } from "../../services/match.service";
 import { useSimpleKeyboardScore } from "../../hooks/useSimpleKeyboardScore";
+import { oversToBalls, ballsToOvers, calculateRunRate, calculateEcon } from "../../utils/cricketUtils";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
@@ -41,6 +42,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
+import { CompositeEventInput } from "../live-match/CompositeEventInput";
+import { DismissalTypeSelector } from "../live-match/DismissalTypeSelector";
 
 interface Bowler {
   id: number;
@@ -184,6 +187,11 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
 
   // Auto Refresh State
   const [autoRefresh, setAutoRefresh] = useState(false);
+
+  // Composite Event State
+  const [recentEvents, setRecentEvents] = useState<string[]>([]);
+  const [showDismissalSelector, setShowDismissalSelector] = useState(false);
+  const [wicketContext, setWicketContext] = useState<any>(null);
 
   const [newSession, setNewSession] = useState({
     session: "",
@@ -1206,9 +1214,11 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
           };
 
           if (field === 'overs') {
-            const [completed, balls] = value.split('.').map(v => parseInt(v) || 0);
+            const totalBalls = oversToBalls(value);
+            const completed = Math.floor(totalBalls / 6);
+            const balls = totalBalls % 6;
             updateDto.completedOvers = completed;
-            updateDto.balls = balls % 6;
+            updateDto.balls = balls;
             updateDto.overs = completed + balls / 6;
           } else if (field === 'maidens') {
             updateDto.maidens = value === '' ? 0 : parseInt(value) || 0;
@@ -1562,11 +1572,44 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
       setSaving(true);
       // Use the simple event system instead of direct API call
       const response = await LiveMatchService.handleSimpleEvent(matchId, ballEventInput);
-      toast.success('Event processed successfully');
-      // Set current ball for immediate visual confirmation
-      setCurrentBall(ballEventInput === 'UNDO' ? 'confirming' : ballEventInput);
-      setBallEventInput("");
-      await loadLiveData(true);
+
+      console.log('Simple event response:', response);
+
+      // Check for composite event requiring completion (e.g. wdw)
+      if (response && response.requiresWicketSelection) {
+        // Auto-submit default wicket type to complete the transaction immediately
+        // The user can edit the details manually in the batsman table later
+        const defaultType = response.wicketContext?.eventType === 'WIDE' ? 'stumped' : 'run_out';
+        await LiveMatchService.submitWicketWithDismissalType(matchId, defaultType);
+
+        setBallEventInput("");
+        toast.success("Wicket recorded. Edit details in table if needed.");
+        loadLiveData(true);
+
+        setTimeout(() => {
+          currentBallInputRef.current?.focus();
+        }, 100);
+        return;
+      }
+
+      if (response && response.result) {
+        // Success
+        setBallEventInput("");
+        if (response.result.runs !== undefined) setRuns(String(response.result.runs));
+        if (response.result.wickets !== undefined) setWickets(String(response.result.wickets));
+        if (response.result.overs) setOvers(response.result.overs);
+
+        toast.success("Ball updated");
+        loadLiveData(true);
+      }
+      else {
+        toast.success('Event processed successfully');
+        // Set current ball for immediate visual confirmation
+        setCurrentBall(ballEventInput === 'UNDO' ? 'confirming' : ballEventInput);
+        setBallEventInput("");
+        await loadLiveData(true);
+      }
+
       // Small timeout to ensure input is rendered and available after reload
       setTimeout(() => {
         currentBallInputRef.current?.focus();
@@ -1574,6 +1617,38 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
     } catch (error: any) {
       console.error('Failed to process event:', error);
       toast.error(error.response?.data?.userMessage || 'Failed to process event');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDismissalDetailsUpdate = async (type: string, text: string) => {
+    if (!editingDismissalId || !matchId || !currentInning) return;
+
+    try {
+      setSaving(true);
+
+      const batsman = batsmen.find(b => b.id === editingDismissalId);
+      if (!batsman || !batsman._playerId) return;
+
+      await LiveMatchService.updateBatsman(
+        matchId,
+        parseInt(currentInning),
+        batsman._playerId,
+        {
+          isOut: true,
+          dismissalType: type as any,
+          dismissalText: text
+        }
+      );
+
+      toast.success("Dismissal details updated");
+      setShowDismissalSelector(false);
+      setEditingDismissalId(null);
+      loadLiveData(true);
+    } catch (error: any) {
+      console.error("Failed to update dismissal details:", error);
+      toast.error(error?.response?.data?.userMessage || "Failed to update dismissal details");
     } finally {
       setSaving(false);
     }
@@ -1598,6 +1673,24 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
     } catch (error: any) {
       console.error('Failed to update match status:', error);
       toast.error(error.response?.data?.userMessage || 'Failed to update match status');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDismissalSelect = async (dismissalType: string) => {
+    if (!matchId) return;
+
+    try {
+      setSaving(true);
+      await LiveMatchService.submitWicketWithDismissalType(matchId, dismissalType);
+      toast.success('Wicket recorded successfully');
+      await loadLiveData(true);
+      setShowDismissalSelector(false);
+      setWicketContext(null);
+    } catch (error: any) {
+      console.error('Failed to submit wicket dismissal:', error);
+      toast.error(error.message || 'Failed to submit dismissal type');
     } finally {
       setSaving(false);
     }
@@ -2296,6 +2389,21 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
               onConfirm={confirmTossUpdate}
               confirmLabel="Update Toss"
             />
+
+            <DismissalTypeSelector
+              open={showDismissalSelector}
+              onClose={() => {
+                setShowDismissalSelector(false);
+                setEditingDismissalId(null);
+              }}
+              onSelect={handleDismissalDetailsUpdate}
+              players={bowlingSquad} // Pass bowling squad as players (includes fielders/bowlers)
+              currentBowler={bowlers.find(b => b.isSelected) ? {
+                _id: bowlers.find(b => b.isSelected)!._playerId,
+                name: bowlers.find(b => b.isSelected)!.name
+              } : undefined}
+            />
+
           </div>
 
           {/* Middle: Odds */}
@@ -2913,45 +3021,20 @@ export function LiveMatchLiveTab({ matchId, matchData, matchFormat, liveStatus: 
                         <div className="text-slate-900 dark:text-slate-200">{batsman.name}</div>
                         {(batsman.dismissal || batsman.status === 'out' || editingDismissalId === batsman.id) && (
                           <div className="text-[10px] text-red-600 flex items-center gap-1 min-h-[16px]">
-                            {editingDismissalId === batsman.id ? (
-                              <Input
-                                autoFocus
-                                className="h-5 w-32 p-0 text-[10px] bg-white dark:bg-slate-800 border border-red-300 dark:border-red-700 px-1"
-                                value={batsman.dismissal || ''}
-                                onChange={(e) => handleBatsmanStatInputChange(batsman.id, 'dismissal', e.target.value)}
-                                onClick={(e) => e.stopPropagation()}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    handleBatsmanStatSave(batsman.id, 'dismissal', e.currentTarget.value);
-                                    setEditingDismissalId(null);
-                                  } else if (e.key === 'Escape') {
-                                    setEditingDismissalId(null);
-                                  }
-                                }}
-                                onBlur={(e) => {
-                                  handleBatsmanStatSave(batsman.id, 'dismissal', e.target.value);
-                                  setEditingDismissalId(null);
-                                }}
-                              />
-                            ) : (
-                              <>
-                                <span>{batsman.dismissal || 'out'}</span>
-                                <Button
-                                  variant="ghost"
-                                  size="xs"
-                                  className="h-3 w-3 p-0 hover:bg-transparent"
-                                  onClick={(e: React.MouseEvent) => {
-                                    e.stopPropagation();
-                                    if (!batsman.dismissal) {
-                                      handleBatsmanStatInputChange(batsman.id, 'dismissal', 'out');
-                                    }
-                                    setEditingDismissalId(batsman.id);
-                                  }}
-                                >
-                                  <Pencil className="h-3 w-3 opacity-50 hover:opacity-100 dark:text-red-400" />
-                                </Button>
-                              </>
-                            )}
+                            <span className="font-medium text-slate-800 dark:text-slate-300">{batsman.dismissal || 'out'}</span>
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              className="h-4 w-4 p-0 ml-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full"
+                              onClick={(e: React.MouseEvent) => {
+                                e.stopPropagation();
+                                setEditingDismissalId(batsman.id);
+                                setShowDismissalSelector(true);
+                              }}
+                              title="Edit Dismissal Details"
+                            >
+                              <Pencil className="h-2.5 w-2.5 opacity-60 hover:opacity-100 text-slate-500 dark:text-slate-400" />
+                            </Button>
                           </div>
                         )}
                         {batsman.inScorecard && !batsman.dismissal && (

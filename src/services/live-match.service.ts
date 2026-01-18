@@ -528,6 +528,27 @@ export class LiveMatchService {
    */
   static async handleSimpleEvent(matchId: string, eventString: string): Promise<any> {
     const response = await axiosInstance.post(`/admin/matches/${matchId}/simple-event`, { event: eventString });
+    // Return full response data to check for requiresWicketSelection
+    return response.data?.data || response.data;
+  }
+
+  /**
+   * Submit wicket with dismissal type after wdw/nbw event
+   * 
+   * This is called after the user selects a dismissal type from the modal
+   * when a wide+wicket or no-ball+wicket event is triggered.
+   * 
+   * @param matchId - The ID of the match
+   * @param dismissalType - The selected dismissal type (run_out, stumped, etc.)
+   * @returns Promise with the updated live status
+   */
+  static async submitWicketWithDismissalType(matchId: string, dismissalType: string): Promise<any> {
+    const response = await axiosInstance.post(`/admin/matches/${matchId}/event`, {
+      type: 'WICKET',
+      runs: 0,
+      wicketType: dismissalType,
+      isComposite: true
+    });
     return response.data?.data?.result;
   }
 
