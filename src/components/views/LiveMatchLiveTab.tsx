@@ -89,7 +89,7 @@ interface LiveMatchLiveTabProps {
     toss?: string;
     status?: string;
   };
-  matchFormat?: 'test' | 'odi' | 't20' | 't20i';
+  matchFormat?: 'test' | 'odi' | 't20' | 't20i' | 't10' | 'hundred';
   liveStatus?: any;
   ballsPerOver?: number;
   oversPerInning?: number;

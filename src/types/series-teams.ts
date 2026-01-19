@@ -15,7 +15,7 @@ export interface SquadPlayer {
 export interface SeriesTeam {
   _id: string;
   seriesId: string;
-  teamId: string;
+  teamId: string | Team; // Can be populated
   team?: Team; // populated
   format: 'ODI' | 'T20' | 'Test' | 'T10' | '100B';
   groupName?: string;

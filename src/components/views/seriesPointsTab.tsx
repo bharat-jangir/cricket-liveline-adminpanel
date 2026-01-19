@@ -741,18 +741,27 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                                     </SelectTrigger>
                                     <SelectContent>
                                         {availableTeams
-                                            .filter(team => !selectedTeamIds.includes(team.teamId))
-                                            .map((team) => (
-                                                <SelectItem key={team.teamId} value={team.teamId}>
-                                                    {team.team?.name || team.team?.shortName || 'Unknown Team'}
-                                                </SelectItem>
-                                            ))}
+                                            .filter(team => {
+                                                const teamIdStr = typeof team.teamId === 'string' ? team.teamId : (team.teamId._id || '');
+                                                return !selectedTeamIds.includes(teamIdStr);
+                                            })
+                                            .map((team) => {
+                                                const teamIdStr = typeof team.teamId === 'string' ? team.teamId : (team.teamId._id || '');
+                                                return (
+                                                    <SelectItem key={teamIdStr} value={teamIdStr}>
+                                                        {team.team?.name || team.team?.shortName || 'Unknown Team'}
+                                                    </SelectItem>
+                                                );
+                                            })}
                                     </SelectContent>
                                 </Select>
                                 {selectedTeamIds.length > 0 && (
                                     <div className='flex flex-wrap gap-2 mt-2'>
                                         {selectedTeamIds.map((teamId) => {
-                                            const team = availableTeams.find(t => t.teamId === teamId);
+                                            const team = availableTeams.find(t => {
+                                                const tIdStr = typeof t.teamId === 'string' ? t.teamId : (t.teamId._id || '');
+                                                return tIdStr === teamId;
+                                            });
                                             return (
                                                 <Badge key={teamId} variant='secondary' className='cursor-pointer' onClick={() => {
                                                     setSelectedTeamIds(selectedTeamIds.filter(id => id !== teamId));
@@ -839,17 +848,8 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                                 <Select
                                     value=""
                                     onValueChange={(value) => {
-                                        if (value) {
-                                            // Ensure we're storing the teamId as a string
-                                            const teamIdString = typeof value === 'string'
-                                                ? value
-                                                : (typeof value === 'object' && value !== null
-                                                    ? value._id?.toString() || value.toString()
-                                                    : String(value));
-
-                                            if (teamIdString && !multiSelectedTeamIds.includes(teamIdString)) {
-                                                setMultiSelectedTeamIds([...multiSelectedTeamIds, teamIdString]);
-                                            }
+                                        if (value && !multiSelectedTeamIds.includes(value)) {
+                                            setMultiSelectedTeamIds([...multiSelectedTeamIds, value]);
                                         }
                                     }}
                                     disabled={loadingTeams}
@@ -884,7 +884,10 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                                 {multiSelectedTeamIds.length > 0 && (
                                     <div className='flex flex-wrap gap-2 mt-2'>
                                         {multiSelectedTeamIds.map((teamId) => {
-                                            const team = availableTeams.find(t => t.teamId === teamId);
+                                            const team = availableTeams.find(t => {
+                                                const tIdStr = typeof t.teamId === 'string' ? t.teamId : (t.teamId._id || '');
+                                                return tIdStr === teamId;
+                                            });
                                             return (
                                                 <Badge key={teamId} variant='secondary' className='cursor-pointer' onClick={() => {
                                                     setMultiSelectedTeamIds(multiSelectedTeamIds.filter(id => id !== teamId));
