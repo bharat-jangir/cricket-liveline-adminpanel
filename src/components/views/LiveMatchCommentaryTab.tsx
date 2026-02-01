@@ -338,6 +338,11 @@ export function LiveMatchCommentaryTab({
             wickets={item.highlightData.overSummaryWickets || 0}
             ballsData={ballsLabels}
             commentary={""}
+            matchScore={item.highlightData.matchScore}
+            matchOvers={item.highlightData.matchOvers}
+            batsman1={item.highlightData.batsman1}
+            batsman2={item.highlightData.batsman2}
+            bowler={item.highlightData.bowler}
           />
           <CommentaryEditor
             initialValue={item.commentary || ""}

@@ -243,28 +243,9 @@ export function LiveMatchLiveTab({
       // Error toast is already shown by the hook
     },
     showToasts: true,
-    getBowlerName: () => {
-      console.log('getBowlerName called, bowlers:', bowlers);
-      const currentBowler = bowlers.find(b => b.isSelected);
-      console.log('Current bowler found:', currentBowler);
-      return currentBowler?.name || 'Unknown Bowler';
-    },
-    getBatsmanName: () => {
-      console.log('getBatsmanName called, batsmen:', batsmen, 'liveStatus:', liveStatus);
-      // First try to find by currentStrikerId
-      if (liveStatus?.currentStrikerId) {
-        const striker = batsmen.find(b =>
-          String(b._playerId) === String(liveStatus.currentStrikerId)
-        );
-        console.log('Striker found by ID:', striker);
-        if (striker?.name) return striker.name;
-      }
+    getBowlerName: () => currentBowlerName || 'Unknown Bowler',
+    getBatsmanName: () => currentStrikerName || 'Unknown Batsman',
 
-      // Fallback: find any batsman with status 'batting'
-      const anyBatting = batsmen.find(b => b.status === 'batting');
-      console.log('Fallback batsman:', anyBatting);
-      return anyBatting?.name || 'Unknown Batsman';
-    },
   });
 
   const availablePlayers = useMemo(() => {
@@ -345,6 +326,25 @@ export function LiveMatchLiveTab({
 
     return null;
   }, []);
+
+  // Centralized player name lookup for scoring events
+  const currentBowlerName = useMemo(() => {
+    const id = getPlayerIdString(liveStatus?.currentBowlerId);
+    if (!id) return null;
+    // Look in scorecard first then fall back to full squad
+    return bowlers.find(b => b._playerId === id)?.name ||
+      bowlingSquad.find(p => String(p._id) === id)?.name ||
+      'Unknown Bowler';
+  }, [liveStatus?.currentBowlerId, bowlers, bowlingSquad, getPlayerIdString]);
+
+  const currentStrikerName = useMemo(() => {
+    const id = getPlayerIdString(liveStatus?.currentStrikerId);
+    if (!id) return null;
+    // Look in scorecard first then fall back to full squad
+    return batsmen.find(b => b._playerId === id)?.name ||
+      battingSquad.find(p => String(p._id) === id)?.name ||
+      'Unknown Batsman';
+  }, [liveStatus?.currentStrikerId, batsmen, battingSquad, getPlayerIdString]);
 
   const getTeamScoreDisplay = (teamId: string) => {
     if (!currentBattingTeamId) {
@@ -1607,7 +1607,12 @@ export function LiveMatchLiveTab({
     try {
       setSaving(true);
       // Use the simple event system instead of direct API call
-      const response = await LiveMatchService.handleSimpleEvent(matchId, ballEventInput);
+      const response = await LiveMatchService.handleSimpleEvent(
+        matchId,
+        ballEventInput,
+        currentBowlerName || undefined,
+        currentStrikerName || undefined
+      );
 
       console.log('Simple event response:', response);
 
