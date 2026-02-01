@@ -48,6 +48,12 @@ export interface UseSimpleKeyboardScoreOptions {
 
   /** Additional elements to ignore keyboard events from (e.g., input fields) */
   ignoreElements?: string[];
+
+  /** Function to get current bowler name */
+  getBowlerName?: () => string;
+
+  /** Function to get current batsman name */
+  getBatsmanName?: () => string;
 }
 
 /**
@@ -64,6 +70,8 @@ export function useSimpleKeyboardScore(options: UseSimpleKeyboardScoreOptions) {
     onError,
     showToasts = true,
     ignoreElements = ['INPUT', 'TEXTAREA', 'SELECT'],
+    getBowlerName,
+    getBatsmanName,
   } = options;
 
   const isProcessingRef = useRef(false);
@@ -89,7 +97,11 @@ export function useSimpleKeyboardScore(options: UseSimpleKeyboardScoreOptions) {
         toast.loading(`Processing ${eventString}...`, { id: 'simple-score-event' });
       }
 
-      const response = await LiveMatchService.handleSimpleEvent(matchId, eventString);
+      // Get current player names
+      const bowlerName = getBowlerName?.();
+      const batsmanName = getBatsmanName?.();
+
+      const response = await LiveMatchService.handleSimpleEvent(matchId, eventString, bowlerName, batsmanName);
 
       if (showToasts) {
         toast.success(`${eventString} recorded successfully`, { id: 'simple-score-event' });
@@ -110,7 +122,7 @@ export function useSimpleKeyboardScore(options: UseSimpleKeyboardScoreOptions) {
     } finally {
       isProcessingRef.current = false;
     }
-  }, [matchId, onSuccess, onError, showToasts]);
+  }, [matchId, onSuccess, onError, showToasts, getBowlerName, getBatsmanName]);
 
   /**
    * Map keyboard key to simple event string

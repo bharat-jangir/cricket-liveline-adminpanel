@@ -1,39 +1,13 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { MoreVertical, Pencil, Plus, RefreshCw, Save } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { LiveMatchService, type LiveMatchStatus, type Scorecard, type BattingScorecard, type BowlingScorecard, type UpdateBatsmanDto, type UpdateBowlerDto, type UpdateTossDto, type Inning } from "../../services/live-match.service";
-import { MatchService } from "../../services/match.service";
 import { useSimpleKeyboardScore } from "../../hooks/useSimpleKeyboardScore";
-import { oversToBalls, ballsToOvers, calculateRunRate, calculateEcon } from "../../utils/cricketUtils";
+import { LiveMatchService, type Inning, type LiveMatchStatus, type Scorecard, type UpdateBatsmanDto, type UpdateBowlerDto, type UpdateTossDto } from "../../services/live-match.service";
+import { MatchService } from "../../services/match.service";
+import { oversToBalls } from "../../utils/cricketUtils";
+import { DismissalTypeSelector } from "../live-match/DismissalTypeSelector";
 import { Button } from "../ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { Input } from "../ui/input";
-import { Label } from "../ui/label";
 import { Checkbox } from "../ui/checkbox";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../ui/table";
-import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "../ui/dropdown-menu";
-import { MoreVertical, RefreshCw, Plus, Save, Pencil } from "lucide-react";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import {
   Dialog,
@@ -42,8 +16,31 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
-import { CompositeEventInput } from "../live-match/CompositeEventInput";
-import { DismissalTypeSelector } from "../live-match/DismissalTypeSelector";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../ui/table";
 
 interface Bowler {
   id: number;
@@ -246,6 +243,28 @@ export function LiveMatchLiveTab({
       // Error toast is already shown by the hook
     },
     showToasts: true,
+    getBowlerName: () => {
+      console.log('getBowlerName called, bowlers:', bowlers);
+      const currentBowler = bowlers.find(b => b.isSelected);
+      console.log('Current bowler found:', currentBowler);
+      return currentBowler?.name || 'Unknown Bowler';
+    },
+    getBatsmanName: () => {
+      console.log('getBatsmanName called, batsmen:', batsmen, 'liveStatus:', liveStatus);
+      // First try to find by currentStrikerId
+      if (liveStatus?.currentStrikerId) {
+        const striker = batsmen.find(b =>
+          String(b._playerId) === String(liveStatus.currentStrikerId)
+        );
+        console.log('Striker found by ID:', striker);
+        if (striker?.name) return striker.name;
+      }
+
+      // Fallback: find any batsman with status 'batting'
+      const anyBatting = batsmen.find(b => b.status === 'batting');
+      console.log('Fallback batsman:', anyBatting);
+      return anyBatting?.name || 'Unknown Batsman';
+    },
   });
 
   const availablePlayers = useMemo(() => {
@@ -966,7 +985,7 @@ export function LiveMatchLiveTab({
   const [editingOdds, setEditingOdds] = useState(odds);
 
   // Over History State
-  const [overHistory, setOverHistory] = useState<Array<{ over: number; runs: string[] }>>([]);
+  const [overHistory, setOverHistory] = useState<Array<{ over: number; runs: any[] }>>([]);
 
   // Load sessions from API
   const loadSessions = useCallback(async () => {
@@ -2115,11 +2134,16 @@ export function LiveMatchLiveTab({
   // Helper to format ball display text
   const getBallDisplay = (ball: any) => {
     // Handle string/number inputs (legacy/simple format)
-    if (typeof ball !== 'object') return String(ball);
+    if (typeof ball !== 'object') {
+      const s = String(ball).toLowerCase();
+      if (s === 'o') return 'Over';
+      return String(ball);
+    }
 
     // If it has explicit label/display text, use it
-    if (ball.label) return ball.label;
-    if (ball.display) return ball.display;
+    const label = ball.ballLabel || ball.label || ball.display;
+    if (label && label.toLowerCase() === 'o') return 'Over';
+    if (label) return label;
 
     // Check specific types from backend
     const type = ball.type || ball.eventType;
@@ -2142,12 +2166,18 @@ export function LiveMatchLiveTab({
     // Default inactive color
     const defaultColor = 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300';
 
-    // Check if ball is string/number
+    // Extract label for simple matching
+    const label = typeof ball === 'object'
+      ? (ball.ballLabel || ball.label || String(ball.runs || ''))
+      : String(ball);
+
+    if (label === '4') return 'bg-orange-500 text-white';
+    if (label === '6') return 'bg-green-600 text-white';
+    if (label.toLowerCase() === 'w') return 'bg-red-600 text-white';
+    if (label.toLowerCase() === 'o') return 'bg-blue-600 text-white';
+
+    // Check if ball is string/number (original logic for backward compatibility if needed)
     if (typeof ball !== 'object') {
-      const val = String(ball);
-      if (val === '4') return 'bg-orange-500 text-white';
-      if (val === '6') return 'bg-green-600 text-white';
-      if (val === 'w' || val === 'W') return 'bg-red-600 text-white';
       return defaultColor;
     }
 
@@ -2644,7 +2674,7 @@ export function LiveMatchLiveTab({
               {/* Current Ball Display */}
               <div className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded p-2 text-center">
                 <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">Last Ball Result</div>
-                <div className="text-lg font-bold text-slate-900 dark:text-slate-100">{currentBall}</div>
+                <div className="text-lg font-bold text-slate-900 dark:text-slate-100">{getBallDisplay(currentBall)}</div>
               </div>
 
               <Input

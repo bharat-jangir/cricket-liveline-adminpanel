@@ -1,244 +1,411 @@
-import { useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Button } from "../ui/button";
 import { Card, CardContent } from "../ui/card";
-import { Checkbox } from "../ui/checkbox";
-import { Link as LinkIcon, User, Trash2, FileText, BarChart3, Bell, Search } from "lucide-react";
+import { Trash2, Save, Check } from "lucide-react";
 import { RichTextEditor } from "../ui/RichTextEditor";
+import { LiveMatchService } from "../../services/live-match.service";
+import {
+  WicketHighlightCard,
+  MilestoneHighlightCard,
+  InningsSummaryCard,
+  OverSummaryCard,
+} from "./highlight-cards";
 
-interface CommentaryBall {
-  id: number;
-  over: string;
-  score: string;
-  bowler: string;
-  batsman: string;
-  ballResult: string;
-  commentaryText: string;
-  isVoiceCard: boolean;
-  isLinked: boolean;
-  checkbox1: boolean;
-  checkbox2: boolean;
+/**
+ * Helper to get ball style class based on ball outcome
+ * Ported from LiveMatchLiveTab.tsx for consistency
+ */
+const getBallColorClass = (ball: any) => {
+  // Default inactive color
+  const defaultColor = 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-slate-100';
+
+  // Extract label for simple matching
+  const label = typeof ball === 'object'
+    ? (ball.ballLabel || ball.label || String(ball.runs || ''))
+    : String(ball);
+
+  const cleanLabel = label.toLowerCase();
+
+  // Wicket - Red
+  if (cleanLabel === 'w' || (typeof ball === 'object' && (ball.type === 'WICKET' || ball.isWicket))) {
+    return 'bg-red-600 text-white';
+  }
+
+  // Six - Green
+  if (label === '6' || (typeof ball === 'object' && (ball.runs === 6 || ball.type === 'RUN' && ball.runs === 6))) {
+    return 'bg-green-600 text-white';
+  }
+
+  // Four - Orange
+  if (label === '4' || (typeof ball === 'object' && (ball.runs === 4 || ball.type === 'RUN' && ball.runs === 4))) {
+    return 'bg-orange-500 text-white';
+  }
+
+  // Over end - Blue
+  if (cleanLabel === 'o') {
+    return 'bg-blue-600 text-white';
+  }
+
+  return defaultColor;
+};
+
+interface CommentaryEditorProps {
+  initialValue: string;
+  onSave: (value: string) => Promise<void>;
+}
+
+function CommentaryEditor({ initialValue, onSave }: CommentaryEditorProps) {
+  const [value, setValue] = useState(initialValue);
+  const [isDirty, setIsDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setValue(initialValue);
+    setIsDirty(false);
+  }, [initialValue]);
+
+  const handleSave = async () => {
+    if (!isDirty || saving) return;
+    setSaving(true);
+    try {
+      await onSave(value);
+      setIsDirty(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (error) {
+      console.error("Failed to save commentary:", error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <RichTextEditor
+        value={value}
+        onChange={(val) => {
+          setValue(val);
+          setIsDirty(val !== initialValue);
+        }}
+        placeholder="Enter commentary text..."
+        className="min-h-[80px]"
+      />
+      {isDirty && (
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={saving}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white h-8"
+          >
+            {saving ? (
+              <div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-1.5" />
+            ) : (
+              <Save className="size-4 mr-1.5" />
+            )}
+            Save Changes
+          </Button>
+        </div>
+      )}
+      {!isDirty && saved && (
+        <div className="flex justify-end text-emerald-600 text-xs font-medium items-center">
+          <Check className="size-3 mr-1" />
+          Changes Saved
+        </div>
+      )}
+    </div>
+  );
 }
 
 interface LiveMatchCommentaryTabProps {
-  commentary: CommentaryBall[];
-  onCommentaryChange: (commentary: CommentaryBall[]) => void;
+  matchId: string;
 }
 
 export function LiveMatchCommentaryTab({
-  commentary,
-  onCommentaryChange,
+  matchId,
 }: LiveMatchCommentaryTabProps) {
-  const handleAddNormalBall = (afterBallId?: number) => {
-    let newOver = "45.1";
-    let newScore = "213/8";
+  const [commentary, setCommentary] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-    if (afterBallId) {
-      const afterBall = commentary.find((b) => b.id === afterBallId);
-      if (afterBall) {
-        const [overNum, ballNum] = afterBall.over.split(".").map(Number);
-        const newBallNum = ballNum + 1;
-
-        if (newBallNum <= 6) {
-          newOver = `${overNum}.${newBallNum}`;
-        } else {
-          newOver = `${overNum + 1}.1`;
-        }
-        newScore = afterBall.score;
+  // Fetch commentary from API
+  useEffect(() => {
+    const fetchCommentary = async () => {
+      // Only show loading if we don't have commentary yet (initial load)
+      // or if matchId changed (commentary would likely be for different match)
+      if (commentary.length === 0) {
+        setLoading(true);
       }
-    }
 
-    const newBall: CommentaryBall = {
-      id: Math.max(...commentary.map((b) => b.id), 0) + 1,
-      over: newOver,
-      score: newScore,
-      bowler: "",
-      batsman: "",
-      ballResult: "",
-      commentaryText: "",
-      isVoiceCard: false,
-      isLinked: false,
-      checkbox1: false,
-      checkbox2: false,
+      try {
+        const data = await LiveMatchService.getCommentary(matchId);
+        setCommentary(data);
+      } catch (error) {
+        console.error("Error fetching commentary:", error);
+      } finally {
+        setLoading(false);
+      }
     };
 
-    if (afterBallId) {
-      const afterIndex = commentary.findIndex((b) => b.id === afterBallId);
-      const newCommentary = [...commentary];
-      newCommentary.splice(afterIndex + 1, 0, newBall);
-      onCommentaryChange(newCommentary);
-    } else {
-      onCommentaryChange([newBall, ...commentary]);
+    fetchCommentary();
+  }, [matchId, refreshKey]);
+
+  // Process commentary to add calculated labels and sort
+  const processedCommentary = useMemo(() => {
+    if (!commentary || commentary.length === 0) return [];
+
+    // 1. Sort by timestamp ascending for sequential processing
+    const sorted = [...commentary].sort((a, b) =>
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+
+    const overCounters: Record<number, number> = {};
+
+    const withLabels = sorted.map(item => {
+      const type = item.type || 'ball';
+
+      // Events that represent a delivery and should be numbered
+      const isDelivery = ['ball', 'wicket', 'milestone'].includes(type);
+
+      if (!isDelivery) {
+        return item;
+      }
+
+      const overNumber = item.overNumber || 0;
+      if (overCounters[overNumber] === undefined) overCounters[overNumber] = 0;
+
+      if (item.isLegal) {
+        overCounters[overNumber]++;
+      }
+
+      const ballIndex = overCounters[overNumber];
+      return {
+        ...item,
+        calculatedIndex: `${overNumber}.${ballIndex}`,
+        calculatedResult: item.ballLabel || (type === 'wicket' ? 'W' : '')
+      };
+    });
+
+    // 2. Reverse for display (latest first)
+    return withLabels.reverse();
+  }, [commentary]);
+
+  // Auto-refresh every 5 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRefreshKey((prev) => prev + 1);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleUpdateCommentary = async (
+    commentaryId: string,
+    newCommentary: string
+  ) => {
+    try {
+      await LiveMatchService.updateCommentary(matchId, commentaryId, newCommentary);
+      // Update local state
+      setCommentary((prev) =>
+        prev.map((item) =>
+          item._id === commentaryId
+            ? { ...item, commentary: newCommentary, isAutoGenerated: false }
+            : item
+        )
+      );
+    } catch (error) {
+      console.error("Error updating commentary:", error);
     }
   };
 
-  const sortedCommentary = [...commentary].sort((a, b) => {
-    const [aOver, aBall] = a.over.split(".").map(Number);
-    const [bOver, bBall] = b.over.split(".").map(Number);
-
-    if (aOver !== bOver) {
-      return bOver - aOver;
+  const handleDeleteCommentary = async (commentaryId: string) => {
+    try {
+      await LiveMatchService.deleteCommentary(matchId, commentaryId);
+      // Remove from local state
+      setCommentary((prev) => prev.filter((item) => item._id !== commentaryId));
+    } catch (error) {
+      console.error("Error deleting commentary:", error);
     }
-    return bBall - aBall;
-  });
-
-  const handleDeleteBall = (ballId: number) => {
-    onCommentaryChange(commentary.filter((ball) => ball.id !== ballId));
   };
 
-  const updateBall = (ballId: number, updates: Partial<CommentaryBall>) => {
-    onCommentaryChange(
-      commentary.map((item) =>
-        item.id === ballId ? { ...item, ...updates } : item
-      )
+  const renderCommentaryCard = (item: any) => {
+    const commentaryType = item.type || "ball";
+
+    // Render (Wicket, Milestone, etc.)
+    const renderCardHeader = (index: string | undefined, label: string, id: string) => (
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-2">
+          {index && (
+            <span className="text-slate-500 font-medium text-xs">
+              {index}
+            </span>
+          )}
+          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${getBallColorClass(item)}`}>
+            {label}
+          </span>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0 text-red-600 hover:text-red-700"
+          onClick={() => handleDeleteCommentary(id)}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    );
+
+    // Render wicket highlight card
+    if (commentaryType === "wicket" && item.highlightData) {
+      return (
+        <div key={item._id} className="relative space-y-3">
+          {renderCardHeader(item.calculatedIndex, item.calculatedResult || 'WICKET', item._id)}
+          <WicketHighlightCard
+            batsmanName={item.highlightData.wicketBatsmanName || "Batsman"}
+            dismissalType={item.highlightData.wicketDismissalType || "bowled"}
+            bowlerName={item.highlightData.wicketBowlerName || "Bowler"}
+            fielderName={item.highlightData.wicketFielderName}
+            runs={item.highlightData.wicketBatsmanRuns || 0}
+            balls={item.highlightData.wicketBatsmanBalls || 0}
+            fours={item.highlightData.wicketBatsmanFours || 0}
+            sixes={item.highlightData.wicketBatsmanSixes || 0}
+            strikeRate={item.highlightData.wicketBatsmanSR || 0}
+            commentary={""} // Passed to editor instead
+          />
+          <CommentaryEditor
+            initialValue={item.commentary || ""}
+            onSave={(newVal) => handleUpdateCommentary(item._id, newVal)}
+          />
+        </div>
+      );
+    }
+
+    // Render milestone highlight card
+    if (commentaryType === "milestone" && item.highlightData) {
+      return (
+        <div key={item._id} className="relative space-y-3">
+          {renderCardHeader(item.calculatedIndex, item.calculatedResult || 'MILESTONE', item._id)}
+          <MilestoneHighlightCard
+            playerName={item.highlightData.milestonePlayerName || "Player"}
+            milestoneType={item.highlightData.milestoneType || "50"}
+            value={item.highlightData.milestoneValue || 50}
+            balls={item.highlightData.milestoneBalls || 0}
+            commentary={""}
+          />
+          <CommentaryEditor
+            initialValue={item.commentary || ""}
+            onSave={(newVal) => handleUpdateCommentary(item._id, newVal)}
+          />
+        </div>
+      );
+    }
+
+    // Render innings summary card
+    if (commentaryType === "innings_summary" && item.highlightData) {
+      return (
+        <div key={item._id} className="relative space-y-3">
+          {renderCardHeader(item.calculatedIndex, item.calculatedResult || 'INNINGS SUMMARY', item._id)}
+          <InningsSummaryCard
+            teamName={item.highlightData.inningsTeamName || "Team"}
+            totalRuns={item.highlightData.inningsTotalRuns || 0}
+            totalWickets={item.highlightData.inningsTotalWickets || 0}
+            totalOvers={item.highlightData.inningsTotalOvers || "0.0"}
+            commentary={""}
+          />
+          <CommentaryEditor
+            initialValue={item.commentary || ""}
+            onSave={(newVal) => handleUpdateCommentary(item._id, newVal)}
+          />
+        </div>
+      );
+    }
+
+    // Render over summary card
+    if (commentaryType === "over_end" && item.highlightData) {
+      // Map ballsData objects to strings if needed
+      const ballsLabels = (item.highlightData.overSummaryBallsData || []).map((b: any) =>
+        typeof b === 'string' ? b : b.ballLabel || b.ballValue || '•'
+      );
+
+      return (
+        <div key={item._id} className="relative space-y-3">
+          {renderCardHeader(undefined, item.calculatedLabel || `OVER ${item.highlightData.overSummaryNumber || ''} SUMMARY`, item._id)}
+          <OverSummaryCard
+            overNumber={item.highlightData.overSummaryNumber || 1}
+            bowlerName={item.highlightData.overSummaryBowlerName || "Bowler"}
+            runs={item.highlightData.overSummaryRuns || 0}
+            wickets={item.highlightData.overSummaryWickets || 0}
+            ballsData={ballsLabels}
+            commentary={""}
+          />
+          <CommentaryEditor
+            initialValue={item.commentary || ""}
+            onSave={(newVal) => handleUpdateCommentary(item._id, newVal)}
+          />
+        </div>
+      );
+    }
+
+    // Render regular ball commentary card
+    return (
+      <Card
+        key={item._id}
+        className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+      >
+        <CardContent className="p-4 space-y-3">
+          {/* Header with styled ball numbering */}
+          {renderCardHeader(item.calculatedIndex, item.calculatedResult || 'Ball', item._id)}
+
+          {/* Commentary Editor */}
+          <CommentaryEditor
+            initialValue={item.commentary || ""}
+            onSave={(newVal) => handleUpdateCommentary(item._id, newVal)}
+          />
+
+          {/* Short text if available */}
+          {item.shortText && (
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              Short: {item.shortText}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     );
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-slate-600 dark:text-slate-400">
+          Loading commentary...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full gap-4">
       {/* Left Side: Commentary Cards */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
         <div className="flex-1 overflow-y-auto pr-2 space-y-3">
-          {sortedCommentary.map((ball) => (
-            <Card
-              key={ball.id}
-              className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
-            >
-              <CardContent className="p-4 space-y-3">
-                {/* + Normal Ball Button */}
-                <div className="pt-2 border-b border-slate-200 dark:border-slate-700">
-                  <button
-                    onClick={() => handleAddNormalBall(ball.id)}
-                    className="text-sm font-medium text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
-                  >
-                    + Normal Ball
-                  </button>
-                </div>
-                {/* First Row: Over/Score, Bowler to Batsman, and Icons */}
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 flex-1">
-                    <Checkbox
-                      checked={ball.isVoiceCard}
-                      onCheckedChange={(checked) => {
-                        updateBall(ball.id, { isVoiceCard: checked as boolean });
-                      }}
-                      className="h-4 w-4"
-                    />
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-slate-900 dark:text-white">
-                        {ball.over} {ball.score}
-                      </span>
-                      <span className="text-sm text-slate-700 dark:text-slate-300">
-                        {ball.bowler} to {ball.batsman}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Action Icons */}
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0"
-                      onClick={() => {
-                        updateBall(ball.id, { isLinked: !ball.isLinked });
-                      }}
-                    >
-                      <LinkIcon
-                        className={`h-4 w-4 ${
-                          ball.isLinked
-                            ? "text-blue-600 dark:text-blue-400"
-                            : "text-slate-400 dark:text-slate-500"
-                        }`}
-                      />
-                    </Button>
-                    <Checkbox
-                      checked={ball.checkbox1}
-                      onCheckedChange={(checked) => {
-                        updateBall(ball.id, { checkbox1: checked as boolean });
-                      }}
-                      className="h-4 w-4"
-                    />
-                    <Checkbox
-                      checked={ball.checkbox2}
-                      onCheckedChange={(checked) => {
-                        updateBall(ball.id, { checkbox2: checked as boolean });
-                      }}
-                      className="h-4 w-4"
-                    />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0"
-                      onClick={() => {
-                        // Handle player action
-                      }}
-                    >
-                      <User className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0 text-red-600 hover:text-red-700"
-                      onClick={() => handleDeleteBall(ball.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Second Row: Ball Result Circle and Rich Text Editor */}
-                <div className="flex items-start gap-3">
-                  {/* Ball Result Circle */}
-                  <div className="flex-shrink-0">
-                    <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 flex items-center justify-center">
-                      <span className="text-xs font-semibold text-slate-900 dark:text-white">
-                        {ball.ballResult || "0"}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Rich Text Editor */}
-                  <div className="flex-1">
-                    <RichTextEditor
-                      value={ball.commentaryText}
-                      onChange={(value) => {
-                        updateBall(ball.id, { commentaryText: value });
-                      }}
-                      placeholder="Enter commentary text..."
-                      className="min-h-[100px]"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          {processedCommentary.length === 0 ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center text-slate-600 dark:text-slate-400">
+                <p className="text-lg font-semibold mb-2">No Commentary Yet</p>
+                <p className="text-sm">
+                  Commentary will appear here as balls are scored
+                </p>
+              </div>
+            </div>
+          ) : (
+            processedCommentary.map((item: any) => renderCommentaryCard(item))
+          )}
         </div>
       </div>
 
       {/* Right Side: Live Website Iframe - Tablet Border */}
       <div className="w-1/3 flex flex-col h-full">
-        {/* Header Section */}
-        <div className="flex-shrink-0 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4">
-          <div className="flex items-center gap-6">
-            <button className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors">
-              <FileText className="h-4 w-4" />
-              <span>Fantasy Bulletin</span>
-            </button>
-            <button className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors">
-              <BarChart3 className="h-4 w-4" />
-              <span>Match Facts</span>
-            </button>
-            <button className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors">
-              <Bell className="h-4 w-4" />
-              <span>Notification</span>
-            </button>
-            <button className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors">
-              <Search className="h-4 w-4" />
-              <span>Search</span>
-            </button>
-          </div>
-        </div>
-
         {/* Iframe Container */}
         <div className="flex-1 min-h-0 border-8 border-black dark:border-slate-800 rounded-lg overflow-hidden">
           <iframe
@@ -252,4 +419,3 @@ export function LiveMatchCommentaryTab({
     </div>
   );
 }
-

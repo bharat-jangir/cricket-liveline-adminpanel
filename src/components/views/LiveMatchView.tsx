@@ -799,8 +799,7 @@ export function LiveMatchView() {
             {/* Commentary Tab */}
             {activeTab === "commentary" && (
               <LiveMatchCommentaryTab
-                commentary={commentary}
-                onCommentaryChange={setCommentary}
+                matchId={id || ''}
               />
             )}
 
