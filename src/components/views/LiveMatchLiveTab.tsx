@@ -1564,6 +1564,39 @@ export function LiveMatchLiveTab({
     }
   };
 
+  const handleStartSuperOver = async () => {
+    if (!matchId) return;
+
+    // Confirm first
+    if (!window.confirm('Are you sure you want to start a Super Over? This will create new innings.')) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await LiveMatchService.startSuperOver(matchId);
+      toast.success('Super Over started successfully');
+
+      // Refresh all data
+      await loadLiveData(true);
+      await loadAllInnings();
+
+      // Reset local states if needed
+      setRuns("0");
+      setWickets("0");
+      setOvers("0.0");
+      setCurrentBall("0");
+
+    } catch (error: any) {
+      console.error('Failed to start Super Over:', error);
+      toast.error(error?.response?.data?.userMessage || 'Failed to start Super Over');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+
+
 
 
   // Update scoreboard (runs, wickets, overs)
@@ -2202,6 +2235,12 @@ export function LiveMatchLiveTab({
     return defaultColor;
   };
 
+  // Super Over Validation
+  const currentInningData = liveStatus?.innings?.find((i: any) => String(i.inningNumber) === String(currentInning));
+  const isSuperOver = currentInningData?.type === 'super_over';
+  const superOverWickets = Number(wickets);
+  const isSuperOverLimitReached = isSuperOver && superOverWickets >= 2;
+
   return (
     <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950 overflow-auto">
       {/* Top Controls Bar */}
@@ -2272,6 +2311,17 @@ export function LiveMatchLiveTab({
                 disabled={saving}
               >
                 {saving ? 'Updating...' : 'Update'}
+              </Button>
+            </div>
+
+            {/* Super Over Button */}
+            <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+              <Button
+                className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold"
+                onClick={handleStartSuperOver}
+                disabled={saving}
+              >
+                Start Super Over
               </Button>
             </div>
           </div>
@@ -2682,6 +2732,12 @@ export function LiveMatchLiveTab({
                 <div className="text-lg font-bold text-slate-900 dark:text-slate-100">{getBallDisplay(currentBall)}</div>
               </div>
 
+
+              {isSuperOverLimitReached && (
+                <div className="bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 p-2 rounded text-center text-sm font-bold mb-2">
+                  Super Over Limit Reached (2 Wickets)
+                </div>
+              )}
               <Input
                 ref={currentBallInputRef}
                 className="text-center text-2xl font-bold h-12 bg-white dark:bg-slate-900"
@@ -2702,7 +2758,7 @@ export function LiveMatchLiveTab({
               <Button
                 className="bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-600"
                 onClick={handleUpdateCurrentBall}
-                disabled={saving || !currentBattingTeamId}
+                disabled={saving || !currentBattingTeamId || isSuperOverLimitReached}
               >
                 Ball Event
               </Button>
