@@ -85,11 +85,13 @@ interface LiveMatchLiveTabProps {
     team2: { name: string; _id?: string };
     toss?: string;
     status?: string;
+    totalInnings?: number;
   };
   matchFormat?: 'test' | 'odi' | 't20' | 't20i' | 't10' | 'hundred';
   liveStatus?: any;
   ballsPerOver?: number;
   oversPerInning?: number;
+  onMatchRefresh?: () => void;
 }
 
 export function LiveMatchLiveTab({
@@ -98,7 +100,8 @@ export function LiveMatchLiveTab({
   matchFormat,
   liveStatus: initialLiveStatus,
   ballsPerOver: propBallsPerOver,
-  oversPerInning: propOversPerInning
+  oversPerInning: propOversPerInning,
+  onMatchRefresh
 }: LiveMatchLiveTabProps) {
   // Get team names - ensure we get the actual names from matchData
   const team1Name = matchData?.team1?.name || '';
@@ -1580,6 +1583,7 @@ export function LiveMatchLiveTab({
       // Refresh all data
       await loadLiveData(true);
       await loadAllInnings();
+      if (onMatchRefresh) onMatchRefresh();
 
       // Reset local states if needed
       setRuns("0");
@@ -1594,6 +1598,8 @@ export function LiveMatchLiveTab({
       setSaving(false);
     }
   };
+
+
 
 
 
@@ -1771,6 +1777,9 @@ export function LiveMatchLiveTab({
   };
 
   // Update innings
+
+
+  // Update innings
   const handleInningChange = async (inning: string) => {
     if (!matchId) return;
     try {
@@ -1780,8 +1789,11 @@ export function LiveMatchLiveTab({
       });
       setCurrentInning(inning);
       toast.success('Inning updated');
-      await loadLiveData(true);
-      await loadAllInnings();
+      // Reload logic
+      setTimeout(async () => {
+        await loadLiveData(true);
+        await loadAllInnings();
+      }, 500);
     } catch (error: any) {
       console.error('Failed to update inning:', error);
       toast.error(error.response?.data?.userMessage || 'Failed to update inning');
@@ -2314,6 +2326,7 @@ export function LiveMatchLiveTab({
               </Button>
             </div>
 
+
             {/* Super Over Button */}
             <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
               <Button
@@ -2350,14 +2363,11 @@ export function LiveMatchLiveTab({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1">Inning 1</SelectItem>
-                    <SelectItem value="2">Inning 2</SelectItem>
-                    {matchFormat === 'test' && (
-                      <>
-                        <SelectItem value="3">Inning 3</SelectItem>
-                        <SelectItem value="4">Inning 4</SelectItem>
-                      </>
-                    )}
+                    {Array.from({ length: matchData?.totalInnings || 2 }, (_, i) => i + 1).map((inningNum) => (
+                      <SelectItem key={inningNum} value={String(inningNum)}>
+                        Inning {inningNum}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -2451,6 +2461,11 @@ export function LiveMatchLiveTab({
                 {team2Name.charAt(0)}
               </div>
               <div className="leading-tight">
+                {scorecard?.inning?.type === 'super_over' && currentBattingTeamId === team2Id && (
+                  <div className="text-[10px] text-pink-500 font-bold uppercase tracking-wider mb-0.5 leading-none">
+                    Super Over {scorecard.inning.superOverNumber || 1}
+                  </div>
+                )}
                 <div className={`font-bold text-sm ${currentBattingTeamId === team2Id ? '' : 'text-slate-700 dark:text-slate-300'}`}>{team2Name}</div>
                 {getTeamScoreDisplay(team2Id)}
               </div>
@@ -2462,6 +2477,11 @@ export function LiveMatchLiveTab({
               onClick={() => handleTeamClick(team1Name, team1Id)}
             >
               <div className="text-right">
+                {scorecard?.inning?.type === 'super_over' && currentBattingTeamId === team1Id && (
+                  <div className="text-[10px] text-pink-500 font-bold uppercase tracking-wider mb-0.5 leading-none">
+                    Super Over {scorecard.inning.superOverNumber || 1}
+                  </div>
+                )}
                 <div className={`text-sm font-medium ${currentBattingTeamId === team1Id ? '' : 'text-slate-600'}`}>{team1Name}</div>
                 {getTeamScoreDisplay(team1Id)}
               </div>

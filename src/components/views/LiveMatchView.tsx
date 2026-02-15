@@ -4,6 +4,7 @@ import {
   Bell,
   ChevronUp,
   ChevronDown,
+
   FileText,
   Link as LinkIcon,
   MoreVertical,
@@ -42,13 +43,7 @@ import {
 } from "../ui/dropdown-menu";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../ui/select";
+
 import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
 import { LiveMatchInfoTab } from "./LiveMatchInfoTab";
 import { LiveMatchLiveTab } from "./LiveMatchLiveTab";
@@ -296,6 +291,7 @@ export function LiveMatchView() {
       pitchReport: "",
       ballsPerOver: matchData.ballsPerOver,
       oversPerInning: matchData.oversPerInning,
+      totalInnings: matchData.totalInnings,
     };
   }, [matchData, id]);
 
@@ -394,7 +390,7 @@ export function LiveMatchView() {
     },
   ]);
 
-  const [selectedInning, setSelectedInning] = useState('1');
+
 
   const handleAddPartnershipRow = (afterId?: number) => {
     const newRow = {
@@ -746,15 +742,85 @@ export function LiveMatchView() {
             </Tabs>
           </div>
 
+
+          {/* Equation Strip & Result Display */}
+          <div className="flex-1 flex items-center justify-center gap-4">
+            {/* Result Text */}
+            {matchData?.status === 'completed' && matchData?.result?.resultText && (
+              <div className="bg-blue-100 text-blue-800 px-4 py-1 rounded-full text-sm font-bold animate-pulse">
+                {matchData.result.resultText}
+              </div>
+            )}
+
+            {/* Equation Strip (Only if live and chasing) */}
+            {matchData?.status === 'live' && liveStatus?.currentInning > 1 && liveStatus.battingTeamId && liveStatus.equation && (
+              <div className="bg-yellow-100 text-yellow-800 px-4 py-1 rounded-full text-sm font-bold flex items-center gap-2 border border-yellow-200 shadow-sm animate-pulse">
+                <Target className="h-3 w-3" />
+                <span>
+                  {typeof liveStatus.battingTeamId === 'object' ? (liveStatus.battingTeamId as any).shortName || (liveStatus.battingTeamId as any).name : 'Batting Team'}
+                  {' '}needs {liveStatus.equation.runsNeeded} runs in {liveStatus.equation.ballsRemaining} balls
+                </span>
+              </div>
+            )}
+          </div>
+
           {/* Right Side: Empty for now, can add actions later */}
           <div className="flex-1 flex-end">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2 text-sm ml-auto">
+            <div className="flex items-center justify-end gap-2">
+              <div className="flex items-center gap-2 text-sm mr-4">
                 <Wifi className={`h-4 w-4 ${isConnected ? 'text-green-500' : 'text-red-500'}`} />
                 <span className={isConnected ? 'text-green-500' : 'text-red-500'}>
                   {isConnected ? 'Connected' : 'Not Connected'}
                 </span>
               </div>
+
+              {/* Match Control Buttons */}
+              {matchData && (
+                <>
+                  {/* Start Next Inning Button - REMOVED */}
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      if (!id) return;
+                      try {
+                        toast.loading('Evaluating match result...');
+                        // Define interface for response
+                        interface EvaluateResponse {
+                          status: boolean;
+                          statusCode: number;
+                          message: string;
+                          data?: {
+                            resultText?: string;
+                            resultType?: string;
+                          };
+                        }
+                        const res = await LiveMatchService.evaluateMatchOutcome(id) as unknown as EvaluateResponse;
+                        toast.dismiss();
+                        if (res?.data?.resultText) {
+                          toast.success(`Result: ${res.data.resultText}`);
+                          // Reload data to reflect status
+                          loadMatchData();
+                        } else {
+                          toast.success('Match Evaluated');
+                        }
+                      } catch (e) {
+                        toast.dismiss();
+                        toast.error('Failed to evaluate match');
+                        console.error(e);
+                      }
+                    }}
+                    className="bg-blue-600 text-white hover:bg-blue-700 border-none"
+                  >
+                    <ShieldCheck className="h-4 w-4 mr-2" />
+                    Conclude Match
+                  </Button>
+
+
+
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -793,6 +859,10 @@ export function LiveMatchView() {
                 liveStatus={liveStatus}
                 ballsPerOver={transformedMatchData.ballsPerOver}
                 oversPerInning={transformedMatchData.oversPerInning}
+                onMatchRefresh={() => {
+                  loadMatchData();
+                  loadLiveStatus();
+                }}
               />
             )}
 

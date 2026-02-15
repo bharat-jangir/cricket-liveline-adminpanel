@@ -39,6 +39,15 @@ export interface Match {
     elected: 'bat' | 'bowl';
     tossTime?: Date | string;
   };
+  result?: {
+    resultType: 'normal' | 'tie' | 'draw' | 'no_result' | 'super_over';
+    winningTeamId?: string;
+    winMargin?: string;
+    winMarginType?: 'runs' | 'wickets';
+    resultText?: string;
+    isTie?: boolean;
+    isSuperOver?: boolean;
+  };
   ballsPerOver?: number;
   oversPerInning?: number;
   maxBowlerLimit?: number;

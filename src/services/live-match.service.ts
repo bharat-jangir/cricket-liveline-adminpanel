@@ -36,6 +36,12 @@ export interface LiveMatchStatus {
   oversPerInning?: number;
   maxBowlerLimit?: number;
   innings?: Inning[];
+  equation?: {
+    target: number;
+    runsNeeded: number;
+    ballsRemaining: number;
+    requiredRunRate: number;
+  };
 }
 
 export interface UpdateLiveStatusDto {
@@ -652,6 +658,11 @@ export class LiveMatchService {
   static async startSuperOver(matchId: string): Promise<any> {
     // We explicitly send matchId in the body because the DTO requires it, even though it's also a param
     const response = await axiosInstance.post(`/admin/matches/${matchId}/super-over`, { matchId });
+    return response.data?.data?.result || response.data?.result;
+  }
+
+  static async evaluateMatchOutcome(matchId: string): Promise<any> {
+    const response = await axiosInstance.post(`/admin/matches/${matchId}/evaluate`, { matchId });
     return response.data?.data?.result || response.data?.result;
   }
 
