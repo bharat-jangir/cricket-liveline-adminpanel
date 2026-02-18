@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
@@ -8,8 +8,7 @@ import {
   AccordionTrigger,
   AccordionContent,
 } from "../ui/accordion";
-import { Card } from "../ui/card";
-import { Button } from "../ui/button";
+
 import {
   Table,
   TableBody,
@@ -34,18 +33,22 @@ interface TransformedMatch {
   seriesId?: string;
   matchTitle: string;
   team1: {
+    id?: string;
     name: string;
     score: string;
     over?: string;
     logo?: string;
     commentary?: string;
+    scores?: { score: string; over?: string }[]; // Array of score objects
   };
   team2: {
+    id?: string;
     name: string;
     score: string;
     over?: string;
     logo?: string;
     commentary?: string;
+    scores?: { score: string; over?: string }[]; // Array of score objects
   };
   odds: {
     teamName: string;
@@ -172,11 +175,74 @@ export function MatchesView() {
       let team1Over = '';
       let team2Score = '–';
       let team2Over = '';
+      let team1Scores: { score: string; over?: string }[] = [];
+      let team2Scores: { score: string; over?: string }[] = [];
 
       if (liveStatus && match.status === 'live') {
         const [runs, wickets] = liveStatus.score?.split('/') || ['0', '0'];
         team1Score = `${runs}/${wickets}`;
         team1Over = liveStatus.overs || '';
+
+        // Process innings if available for multi-inning display
+        if (liveStatus.innings && Array.isArray(liveStatus.innings)) {
+          // Filter super overs logic:
+          // Keep only the innings from the latest super over (highest superOverNumber)
+          const superOverInnings = liveStatus.innings.filter((inn: any) => inn.type === 'super_over');
+          let maxSuperOverNumber = -1;
+          if (superOverInnings.length > 0) {
+            maxSuperOverNumber = Math.max(...superOverInnings.map((inn: any) => inn.superOverNumber || 0));
+          }
+
+          const validInnings = liveStatus.innings.filter((inn: any) => {
+            if (inn.type === 'super_over') {
+              return (inn.superOverNumber || 0) === maxSuperOverNumber;
+            }
+            return true; // Keep all regular innings
+          });
+
+          // Now map scores to teams
+          validInnings.forEach((inn: any) => {
+            const battingTeamId = typeof inn.battingTeamId === 'object' ? inn.battingTeamId._id : inn.battingTeamId;
+
+            // Determine if this inning belongs to Team A (team1) or Team B (team2)
+            const teamAId = teamA?._id || (typeof match.teamAId === 'string' ? match.teamAId : '');
+            const teamBId = teamB?._id || (typeof match.teamBId === 'string' ? match.teamBId : '');
+
+            // Format score string: "Runs/Wickets (Overs)" or just "Runs" if all out? 
+            // Requirement image shows: "736 & 299-6"
+            // Let's format as "Runs/Wickets" or "Runs-Wickets" as per user image style "299-6"
+
+            // Check if inning is current to add overs? The image shows overs "63.5" alongside the last score.
+            // We will just push the score string here.
+
+            const scoreStr = `${inn.totalRuns}${inn.totalWickets < 10 && !inn.isAllOut ? `-${inn.totalWickets}` : ''}`;
+            let overStr = '';
+
+            const ballsPerOver = match.ballsPerOver || 6;
+            const currentOver = Math.floor(inn.totalBalls / ballsPerOver);
+            const currentBall = inn.totalBalls % ballsPerOver;
+            overStr = `${currentOver}.${currentBall}`;
+
+            if (battingTeamId === teamAId) {
+              team1Scores.push({ score: scoreStr, over: overStr });
+              // If this is the current active inning, capture the over
+              if (inn.inningNumber === liveStatus.currentInning) {
+                team1Over = overStr;
+              }
+            } else if (battingTeamId === teamBId) {
+              team2Scores.push({ score: scoreStr, over: overStr });
+              if (inn.inningNumber === liveStatus.currentInning) {
+                team2Over = overStr;
+              }
+            }
+          });
+
+          // If we have collected scores, use their joined string.
+          // However, the "Teams Scores & Comment" column in the image puts the over NEXT to the score.
+          // "KAR 736 & 299-6 63.5"
+          // We can pass the array of scores and let rendering handle it, or join them here.
+          // The image logic: TeamName [Scores joined by &] [Over if batting]
+        }
       }
 
       return {
@@ -212,18 +278,22 @@ export function MatchesView() {
         seriesId: typeof match.seriesId === 'string' ? match.seriesId : match.seriesId?._id || '',
         matchTitle: match.title || match.shortTitle || '',
         team1: {
+          id: teamA?._id,
           name: teamA?.shortName || teamA?.name || 'Team A',
           score: team1Score,
           over: team1Over,
           logo: teamA?.logo,
           commentary: '',
+          scores: team1Scores.length > 0 ? team1Scores : [{ score: team1Score, over: team1Over }]
         },
         team2: {
+          id: teamB?._id,
           name: teamB?.shortName || teamB?.name || 'Team B',
           score: team2Score,
           over: team2Over,
           logo: teamB?.logo,
           commentary: '',
+          scores: team2Scores.length > 0 ? team2Scores : [{ score: team2Score, over: team2Over }]
         },
         odds: {
           teamName: liveStatus?.oddsTeam || "",
@@ -379,8 +449,18 @@ export function MatchesView() {
                                     )}
                                     <div className="flex flex-col leading-tight text-sm">
                                       <span>{m.team1.name}</span>
-                                      <span className="font-medium">{m.team1.score}</span>
-                                      {m.team1.over && <span className="text-xs text-slate-500">{m.team1.over}</span>}
+                                      <div className="flex flex-col">
+                                        {m.team1.scores && m.team1.scores.length > 0 && m.team1.scores[0].score !== '–' ? (
+                                          m.team1.scores.map((s, idx) => (
+                                            <div key={idx} className="flex items-center gap-1">
+                                              <span className="font-medium">{s.score}</span>
+                                              {s.over && s.over !== '' && <span className="text-xs text-slate-500">{s.over}</span>}
+                                            </div>
+                                          ))
+                                        ) : (
+                                          <span className="font-medium">{m.team1.score}</span>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
 
@@ -388,8 +468,18 @@ export function MatchesView() {
                                   <div className="flex items-center gap-2">
                                     <div className="flex flex-col leading-tight text-sm text-right">
                                       <span className="font-medium">{m.team2.name}</span>
-                                      <span>{m.team2.score}</span>
-                                      {m.team2.over && <span className="text-xs text-slate-500">{m.team2.over}</span>}
+                                      <div className="flex flex-col items-end">
+                                        {m.team2.scores && m.team2.scores.length > 0 && m.team2.scores[0].score !== '–' ? (
+                                          m.team2.scores.map((s, idx) => (
+                                            <div key={idx} className="flex items-center justify-end gap-1">
+                                              {s.over && s.over !== '' && <span className="text-xs text-slate-500">{s.over}</span>}
+                                              <span className="font-medium">{s.score}</span>
+                                            </div>
+                                          ))
+                                        ) : (
+                                          <span className="font-medium">{m.team2.score}</span>
+                                        )}
+                                      </div>
                                     </div>
                                     {m.team2.logo ? (
                                       <img
@@ -531,8 +621,18 @@ export function MatchesView() {
                                     )}
                                     <div className="flex flex-col leading-tight text-sm">
                                       <span>{m.team1.name}</span>
-                                      <span className="font-medium">{m.team1.score}</span>
-                                      {m.team1.over && <span className="text-xs text-slate-500">{m.team1.over}</span>}
+                                      <div className="flex flex-col">
+                                        {m.team1.scores && m.team1.scores.length > 0 && m.team1.scores[0].score !== '–' ? (
+                                          m.team1.scores.map((s, idx) => (
+                                            <div key={idx} className="flex items-center gap-1">
+                                              <span className="font-medium">{s.score}</span>
+                                              {s.over && s.over !== '' && <span className="text-xs text-slate-500">{s.over}</span>}
+                                            </div>
+                                          ))
+                                        ) : (
+                                          <span className="font-medium">{m.team1.score}</span>
+                                        )}
+                                      </div>
                                     </div>
                                   </div>
 
@@ -540,8 +640,18 @@ export function MatchesView() {
                                   <div className="flex items-center gap-2">
                                     <div className="flex flex-col leading-tight text-sm text-right">
                                       <span className="font-medium">{m.team2.name}</span>
-                                      <span>{m.team2.score}</span>
-                                      {m.team2.over && <span className="text-xs text-slate-500">{m.team2.over}</span>}
+                                      <div className="flex flex-col items-end">
+                                        {m.team2.scores && m.team2.scores.length > 0 && m.team2.scores[0].score !== '–' ? (
+                                          m.team2.scores.map((s, idx) => (
+                                            <div key={idx} className="flex items-center justify-end gap-1">
+                                              {s.over && s.over !== '' && <span className="text-xs text-slate-500">{s.over}</span>}
+                                              <span className="font-medium">{s.score}</span>
+                                            </div>
+                                          ))
+                                        ) : (
+                                          <span className="font-medium">{m.team2.score}</span>
+                                        )}
+                                      </div>
                                     </div>
                                     {m.team2.logo ? (
                                       <img
@@ -593,19 +703,6 @@ export function MatchesView() {
   );
 }
 
-function TeamCard({ team }: { team: TransformedMatch['team1'] }) {
-  return (
-    <div className="col-span-4 bg-slate-900 text-white p-4 rounded-md">
-      <h3 className="text-lg font-semibold flex items-center gap-2">
-        {team.name}
-      </h3>
-      <p className="mt-1 text-2xl font-bold">{team.score}</p>
-      {team.commentary && (
-        <p className="text-sm mt-3 opacity-80">{team.commentary}</p>
-      )}
-    </div>
-  );
-}
 
 function OddsBox({ label, back, lay }: { label: string; back: number; lay: number }) {
   return (
@@ -632,28 +729,6 @@ function OddsBox({ label, back, lay }: { label: string; back: number; lay: numbe
       </tbody>
     </table>
   );
-}
-
-
-
-
-function getStatusClasses(status: string) {
-  switch (true) {
-    case status.startsWith("Live"):
-      return "bg-red-100 text-red-700 border border-red-300";
-
-    case status.includes("Break"):
-      return "bg-yellow-100 text-yellow-700 border border-yellow-300";
-
-    case status === "Upcoming":
-      return "!bg-yellow-100 !text-yellow-700 !border-yellow-300 border";
-
-    case status === "Completed":
-      return "bg-green-100 text-green-700 border border-green-300";
-
-    default:
-      return "bg-slate-100 text-slate-700 border border-slate-300";
-  }
 }
 
 function getStatusClassesNormalCss(status: string) {
