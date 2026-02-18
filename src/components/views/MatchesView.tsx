@@ -20,9 +20,7 @@ import {
 import { Input } from "../ui/input";
 import { Loader2 } from "lucide-react";
 import { MatchService } from "../../services/match.service";
-import { LiveMatchService } from "../../services/live-match.service";
 import type { Match } from "../../types/match";
-import type { LiveMatchStatus } from "../../services/live-match.service";
 
 interface TransformedMatch {
   id: string;
@@ -58,6 +56,7 @@ interface TransformedMatch {
   fKeyInn?: string;
   inn?: string;
   comment?: string;
+  result?: string;
 }
 
 export function MatchesView() {
@@ -66,20 +65,19 @@ export function MatchesView() {
   const [loading, setLoading] = useState(true);
   const [matches, setMatches] = useState<TransformedMatch[]>([]);
   const [apiMatches, setApiMatches] = useState<Match[]>([]);
-  const [liveStatuses, setLiveStatuses] = useState<Record<string, LiveMatchStatus>>({});
 
   // Load matches
   useEffect(() => {
     loadMatches();
   }, []);
 
-  // Update matches when live statuses change
+  // Update matches when apiMatches changes
   useEffect(() => {
     if (apiMatches.length > 0) {
-      const transformed = transformMatches(apiMatches, liveStatuses);
+      const transformed = transformMatches(apiMatches);
       setMatches(transformed);
     }
-  }, [apiMatches, liveStatuses]);
+  }, [apiMatches]);
 
   const loadMatches = async () => {
     try {
@@ -88,24 +86,7 @@ export function MatchesView() {
 
       if (response.status && response.data?.result) {
         const matches = response.data.result;
-        console.log('Matches loaded:', matches.length);
-        if (matches.length > 0) {
-          console.log('Sample match structure:', {
-            teamAId: matches[0].teamAId,
-            teamBId: matches[0].teamBId,
-            teamA: matches[0].teamA,
-            teamB: matches[0].teamB,
-            teamAIdType: typeof matches[0].teamAId,
-            teamBIdType: typeof matches[0].teamBId,
-          });
-        }
         setApiMatches(matches);
-
-        // Load live statuses for live matches
-        const liveMatches = matches.filter((m: Match) => m.status === 'live');
-        if (liveMatches.length > 0) {
-          loadLiveStatuses(liveMatches);
-        }
       }
     } catch (error: any) {
       console.error('Failed to load matches:', error);
@@ -115,25 +96,7 @@ export function MatchesView() {
     }
   };
 
-  const loadLiveStatuses = async (liveMatches: Match[]) => {
-    const statusPromises = liveMatches.map(async (match) => {
-      try {
-        const status = await LiveMatchService.getLiveStatus(match._id || '');
-        return { matchId: match._id || '', status };
-      } catch (error) {
-        return { matchId: match._id || '', status: null };
-      }
-    });
-
-    const results = await Promise.all(statusPromises);
-    const statusMap: Record<string, LiveMatchStatus> = {};
-    results.forEach(({ matchId, status }) => {
-      if (status) {
-        statusMap[matchId] = status;
-      }
-    });
-    setLiveStatuses(statusMap);
-  };
+  // Helper function to extract team object from populated field
 
   // Helper function to extract team object from populated field
   const getTeamObject = (teamIdField: any, teamField?: any) => {
@@ -152,7 +115,7 @@ export function MatchesView() {
     return null;
   };
 
-  const transformMatches = (apiMatches: Match[], liveStatuses: Record<string, LiveMatchStatus>): TransformedMatch[] => {
+  const transformMatches = (apiMatches: Match[]): TransformedMatch[] => {
     return apiMatches.map((match) => {
       // Extract team objects - check both teamAId/teamBId (populated) and teamA/teamB (if exists)
       const teamA = getTeamObject(match.teamAId, match.teamA);
@@ -169,8 +132,8 @@ export function MatchesView() {
         }
       }
 
-      // Get live status if available
-      const liveStatus = liveStatuses[match._id || ''];
+      // Get live status if available (now injected by backend)
+      const liveStatus = match.liveStatus;
       let team1Score = '–';
       let team1Over = '';
       let team2Score = '–';
@@ -178,7 +141,7 @@ export function MatchesView() {
       let team1Scores: { score: string; over?: string }[] = [];
       let team2Scores: { score: string; over?: string }[] = [];
 
-      if (liveStatus && match.status === 'live') {
+      if (liveStatus && (match.status === 'live' || match.status === 'completed')) {
         const [runs, wickets] = liveStatus.score?.split('/') || ['0', '0'];
         team1Score = `${runs}/${wickets}`;
         team1Over = liveStatus.overs || '';
@@ -296,13 +259,14 @@ export function MatchesView() {
           scores: team2Scores.length > 0 ? team2Scores : [{ score: team2Score, over: team2Over }]
         },
         odds: {
-          teamName: liveStatus?.oddsTeam || "",
-          back: liveStatus?.oddsBlue || 0,
-          lay: liveStatus?.oddsRed || 0,
+          teamName: match.oddsTeam || "",
+          back: match.oddsBlue || 0,
+          lay: match.oddsRed || 0,
         },
-        fKeyInn: match.currentInning ? `Inn ${match.currentInning}` : undefined,
-        inn: match.currentInning?.toString() || undefined,
-        comment: liveStatus?.comment2 || '',
+        fKeyInn: match.currentInning ? `Inn ${match.currentInning}` : '',
+        inn: match.currentInning ? `${match.currentInning}` : '',
+        comment: match.result?.resultText || match.comment2 || '',
+        result: match.result?.resultText || ''
       };
     });
   };
@@ -499,9 +463,9 @@ export function MatchesView() {
 
                                 </div>
 
-                                {/* Commentary */}
+                                {/* Commentary / Result */}
                                 <div className="text-xs text-slate-600 dark:text-slate-400 leading-snug">
-                                  {m.comment || "this is comment"}
+                                  {m.result || m.comment || ""}
                                 </div>
 
                               </div>
@@ -671,9 +635,9 @@ export function MatchesView() {
 
                                 </div>
 
-                                {/* Commentary */}
+                                {/* Commentary / Result */}
                                 <div className="text-xs text-slate-600 dark:text-slate-400 leading-snug">
-                                  {m.comment || "this is comment"}
+                                  {m.result || m.comment || ""}
                                 </div>
 
                               </div>

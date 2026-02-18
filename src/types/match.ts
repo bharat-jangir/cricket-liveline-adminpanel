@@ -53,6 +53,13 @@ export interface Match {
   maxBowlerLimit?: number;
   createdAt?: Date;
   updatedAt?: Date;
+  liveStatus?: any; // Populated by backend optimization
+
+  // Odds and Comment fields (from backend Match entity)
+  oddsTeam?: string;
+  oddsBlue?: number;
+  oddsRed?: number;
+  comment2?: string;
 }
 
 export interface CreateMatchDto {

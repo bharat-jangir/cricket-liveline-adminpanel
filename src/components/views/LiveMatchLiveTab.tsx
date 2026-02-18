@@ -350,110 +350,100 @@ export function LiveMatchLiveTab({
   }, [liveStatus?.currentStrikerId, batsmen, battingSquad, getPlayerIdString]);
 
   const getTeamScoreDisplay = (teamId: string) => {
-    if (!currentBattingTeamId) {
-      return <div className="text-xs text-slate-500 mt-1">Pending</div>;
-    }
-
-    const currentInningNum = parseInt(currentInning) || 1;
-
-    // If team is currently batting, show current live score
-    if (currentBattingTeamId === teamId) {
-      // Logic for BATTING team (showing current live score)
-      return (
-        <>
-          <div className="flex items-end gap-2">
-            <div className={`text-xl font-bold ${currentBattingTeamId === teamId ? 'text-white' : ''}`}>{runs}-{wickets}</div>
-            <div className={`text-xs mb-1 ${currentBattingTeamId === teamId ? 'text-slate-300' : 'text-slate-500'}`}>{overs}</div>
-          </div>
-          <div className={`text-[10px] ${currentBattingTeamId === teamId ? 'text-slate-400' : 'text-slate-400'}`}>
-            CRR: {(() => {
-              if (liveStatus && liveStatus.runRate && liveStatus.runRate > 0) return liveStatus.runRate.toFixed(2);
-              const r = parseFloat(runs);
-              const oversParts = String(overs).split('.');
-              const completedOvers = parseInt(oversParts[0]) || 0;
-              const ballsInCurrentOver = parseInt(oversParts[1]) || 0;
-              const bpo = ballsPerOver || 6;
-              const totalOvers = completedOvers + (ballsInCurrentOver / bpo);
-
-              if (isNaN(r) || totalOvers <= 0) return "0.00";
-              return (r / totalOvers).toFixed(2);
-            })()}
-            {liveStatus && liveStatus.requiredRunRate && liveStatus.requiredRunRate > 0 && (
-              <span className="ml-2">RRR: {liveStatus.requiredRunRate.toFixed(2)}</span>
-            )}
-            {liveStatus && liveStatus.ballsRemaining && liveStatus.ballsRemaining > 0 && (
-              <span className="ml-2">({liveStatus.ballsRemaining} balls left)</span>
-            )}
-          </div>
-        </>
-      );
-    }
-
-    // Logic for NON-BATTING team (Bowling Team)
-
-    // Rule 1: If current inning is 1, no past inning to show
-    if (currentInningNum === 1) {
-      return (
-        <>
-          <div className="text-xs text-slate-500">Yet to bat</div>
-          <div className="text-[10px] text-slate-400">CRR: -</div>
-        </>
-      );
-    }
-
-    // Rule 2 & 3: For Innings 2+, find the latest PAST inning for this team
-    // Match logic: 
-    // - Inn 2 (Bowling Team) -> Show Inn 1 (if they batted)
-    // - Inn 3 (Bowling Team) -> Show Inn 2
-    // - Inn 4 (Bowling Team) -> Show Inn 3
-    // General rule: Show the latest inning for this team where inningNumber < currentInning
-
-    const teamPastInnings = allInnings.filter(inn => {
-      // 1. Check Team ID Match
+    // 1. Filter innings for this team
+    const teamInnings = allInnings.filter(inn => {
       const innBattingTeamId = typeof inn.battingTeamId === 'object' && inn.battingTeamId !== null
         ? (inn.battingTeamId as any)._id
         : inn.battingTeamId;
+      return String(innBattingTeamId) === String(teamId);
+    }).sort((a, b) => a.inningNumber - b.inningNumber);
 
-      const isTeamMatch = String(innBattingTeamId) === String(teamId);
+    // 2. Identify "current" inning for display purposes
+    // If team is currently batting, that's the "live" inning.
+    // If not, the "latest" inning is what we show as the main score.
+    const isBatting = currentBattingTeamId === teamId;
 
-      // 2. Check Inning Number (Must be past)
-      const isPastInning = inn.inningNumber < currentInningNum;
+    // For non-batting team, we usually show their last innings score
+    // But if they haven't batted yet (and it's inn 1), handle that.
 
-      return isTeamMatch && isPastInning;
-    });
-
-    if (teamPastInnings.length > 0) {
-      // Sort by inning number descending to get the MOST RECENT past inning
-      const latestPastInning = teamPastInnings.sort((a, b) => b.inningNumber - a.inningNumber)[0];
-
-      const bpo = ballsPerOver || 6;
-      const totalOvers = Math.floor(latestPastInning.totalBalls / bpo);
-      const remainderBalls = latestPastInning.totalBalls % bpo;
-
-      return (
-        <>
-          <div className={`flex items-end gap-2 ${currentBattingTeamId === teamId ? '' : 'justify-end'}`}>
-            <div className="text-xl font-bold text-slate-700 dark:text-slate-300">
-              {latestPastInning.totalRuns}-{latestPastInning.totalWickets}
-            </div>
-            <div className="text-xs text-slate-500 mb-1">
-              {totalOvers}.{remainderBalls}
-            </div>
-          </div>
-          <div className="text-[10px] text-slate-400">
-            {`Inn ${latestPastInning.inningNumber}`}
-          </div>
-        </>
-      );
+    if (teamInnings.length === 0) {
+      return <div className="text-xs text-slate-500 mt-1">Yet to bat</div>;
     }
 
-    // Fallback if no past inning found
+    // Determine which inning is the "Main" (Big) display
+    // Usually the last one in the list (most recent)
+    const mainInning = teamInnings[teamInnings.length - 1];
+
+    // Previous innings are all except the main one
+    const previousInnings = teamInnings.slice(0, teamInnings.length - 1);
+
     return (
-      <>
-        <div className="text-xs text-slate-500">Yet to bat</div>
-        <div className="text-[10px] text-slate-400">CRR: -</div>
-      </>
+      <div className="flex flex-col items-end">
+        {/* Previous Innings (Small Vertical List) */}
+        {previousInnings.map(inn => {
+          let typeLabel = `Inn ${inn.inningNumber}`;
+          if (inn.type === 'super_over') {
+            typeLabel = `SO ${inn.superOverNumber || ''}`;
+          }
+
+          return (
+            <div key={inn.inningNumber} className="flex items-center gap-2 text-[10px] text-slate-400">
+              <span>{typeLabel}:</span>
+              <span className="font-medium text-slate-500 dark:text-slate-400">
+                {inn.totalRuns}/{inn.totalWickets}
+              </span>
+              <span>({getOversDisplay(inn.totalBalls)})</span>
+            </div>
+          );
+        })}
+
+        {/* Main Inning (Big Display) */}
+        <div className={`flex items-end gap-2 mt-0.5 ${isBatting ? '' : 'justify-end'}`}>
+          <div className={`text-xl font-bold ${isBatting ? 'text-white' : 'text-slate-700 dark:text-slate-300'}`}>
+            {isBatting ? `${runs}-${wickets}` : `${mainInning.totalRuns}-${mainInning.totalWickets}`}
+          </div>
+          <div className={`text-xs mb-1 ${isBatting ? 'text-slate-300' : 'text-slate-500'}`}>
+            {isBatting ? overs : getOversDisplay(mainInning.totalBalls)}
+          </div>
+        </div>
+
+        {/* CRR / Status for Main Inning */}
+        <div className={`text-[10px] ${isBatting ? 'text-slate-400' : 'text-slate-400'}`}>
+          {/* If batting, show CRR, RRR etc */}
+          {isBatting && (
+            <>
+              CRR: {(() => {
+                if (liveStatus && liveStatus.runRate && liveStatus.runRate > 0) return liveStatus.runRate.toFixed(2);
+                // Fallback calc
+                const bpo = ballsPerOver || 6;
+                const totalOvers = mainInning.totalBalls / bpo;
+                if (totalOvers <= 0) return "0.00";
+                return (mainInning.totalRuns / totalOvers).toFixed(2);
+              })()}
+
+              {liveStatus && liveStatus.requiredRunRate && liveStatus.requiredRunRate > 0 && (
+                <span className="ml-2">RRR: {liveStatus.requiredRunRate.toFixed(2)}</span>
+              )}
+            </>
+          )}
+
+          {/* If NOT batting, show Inning Label */}
+          {!isBatting && (
+            <span>
+              {mainInning.type === 'super_over' ? `Super Over ${mainInning.superOverNumber || ''}` : `Inn ${mainInning.inningNumber}`}
+            </span>
+          )}
+        </div>
+      </div>
     );
+  };
+
+  // Helper for overs display
+  const getOversDisplay = (balls: number) => {
+    const bpo = ballsPerOver || 6;
+    const completed = Math.floor(balls / bpo);
+    const rem = balls % bpo;
+    return `${completed}.${rem}`;
   };
 
   const loadLiveData = useCallback(async (silent = false) => {
