@@ -354,8 +354,11 @@ export function LiveMatchLiveTab({
       return <div className="text-xs text-slate-500 mt-1">Pending</div>;
     }
 
+    const currentInningNum = parseInt(currentInning) || 1;
+
     // If team is currently batting, show current live score
     if (currentBattingTeamId === teamId) {
+      // Logic for BATTING team (showing current live score)
       return (
         <>
           <div className="flex items-end gap-2">
@@ -366,7 +369,6 @@ export function LiveMatchLiveTab({
             CRR: {(() => {
               if (liveStatus && liveStatus.runRate && liveStatus.runRate > 0) return liveStatus.runRate.toFixed(2);
               const r = parseFloat(runs);
-              // Correctly convert overs string (e.g. "7.3") to decimal (7.5)
               const oversParts = String(overs).split('.');
               const completedOvers = parseInt(oversParts[0]) || 0;
               const ballsInCurrentOver = parseInt(oversParts[1]) || 0;
@@ -387,48 +389,65 @@ export function LiveMatchLiveTab({
       );
     }
 
-    // Determine current cycle context (1-2 or 3-4)
-    const currentInningNum = parseInt(currentInning) || 1;
-    const maxInningAllowed = currentInningNum <= 2 ? 2 : 4;
-    const minInningAllowed = currentInningNum <= 2 ? 1 : 3;
+    // Logic for NON-BATTING team (Bowling Team)
 
-    // Filter innings based on context
-    // We only want to show scores from the current "cycle" or pair of innings
-    const validInnings = allInnings.filter(inn =>
-      inn.inningNumber >= minInningAllowed && inn.inningNumber <= maxInningAllowed
-    );
+    // Rule 1: If current inning is 1, no past inning to show
+    if (currentInningNum === 1) {
+      return (
+        <>
+          <div className="text-xs text-slate-500">Yet to bat</div>
+          <div className="text-[10px] text-slate-400">CRR: -</div>
+        </>
+      );
+    }
 
-    // If team is NOT batting, look for their scores in VALID innings
-    const teamInnings = validInnings.filter(inn => {
-      const innBattingTeamId = typeof inn.battingTeamId === 'object' ? inn.battingTeamId?._id : inn.battingTeamId;
-      return String(innBattingTeamId) === String(teamId);
+    // Rule 2 & 3: For Innings 2+, find the latest PAST inning for this team
+    // Match logic: 
+    // - Inn 2 (Bowling Team) -> Show Inn 1 (if they batted)
+    // - Inn 3 (Bowling Team) -> Show Inn 2
+    // - Inn 4 (Bowling Team) -> Show Inn 3
+    // General rule: Show the latest inning for this team where inningNumber < currentInning
+
+    const teamPastInnings = allInnings.filter(inn => {
+      // 1. Check Team ID Match
+      const innBattingTeamId = typeof inn.battingTeamId === 'object' && inn.battingTeamId !== null
+        ? (inn.battingTeamId as any)._id
+        : inn.battingTeamId;
+
+      const isTeamMatch = String(innBattingTeamId) === String(teamId);
+
+      // 2. Check Inning Number (Must be past)
+      const isPastInning = inn.inningNumber < currentInningNum;
+
+      return isTeamMatch && isPastInning;
     });
 
-    if (teamInnings.length > 0) {
-      // For Test matches, there might be multiple innings
-      const latestInning = teamInnings[teamInnings.length - 1];
+    if (teamPastInnings.length > 0) {
+      // Sort by inning number descending to get the MOST RECENT past inning
+      const latestPastInning = teamPastInnings.sort((a, b) => b.inningNumber - a.inningNumber)[0];
+
       const bpo = ballsPerOver || 6;
-      const totalOvers = Math.floor(latestInning.totalBalls / bpo);
-      const remainderBalls = latestInning.totalBalls % bpo;
+      const totalOvers = Math.floor(latestPastInning.totalBalls / bpo);
+      const remainderBalls = latestPastInning.totalBalls % bpo;
 
       return (
         <>
           <div className={`flex items-end gap-2 ${currentBattingTeamId === teamId ? '' : 'justify-end'}`}>
             <div className="text-xl font-bold text-slate-700 dark:text-slate-300">
-              {latestInning.totalRuns}-{latestInning.totalWickets}
+              {latestPastInning.totalRuns}-{latestPastInning.totalWickets}
             </div>
             <div className="text-xs text-slate-500 mb-1">
               {totalOvers}.{remainderBalls}
             </div>
           </div>
           <div className="text-[10px] text-slate-400">
-            {`Inn ${latestInning.inningNumber}`}
+            {`Inn ${latestPastInning.inningNumber}`}
           </div>
         </>
       );
     }
 
-    // Default: Yet to bat
+    // Fallback if no past inning found
     return (
       <>
         <div className="text-xs text-slate-500">Yet to bat</div>
@@ -1784,21 +1803,32 @@ export function LiveMatchLiveTab({
     if (!matchId) return;
     try {
       setSaving(true);
+      setLoading(true); // Show loading state during transition
+
+      // 1. Update backend
       await LiveMatchService.updateLiveStatus(matchId, {
         currentInning: parseInt(inning),
       });
+
+      // 2. Update local state
       setCurrentInning(inning);
       toast.success('Inning updated');
-      // Reload logic
-      setTimeout(async () => {
-        await loadLiveData(true);
-        await loadAllInnings();
-      }, 500);
+
+      // 3. Force reload of ALL data
+      await Promise.all([
+        loadLiveData(true), // This loads status and scorecard
+        loadAllInnings(),
+        loadOverHistory(),
+        loadSquads(),
+        loadSessions()
+      ]);
+
     } catch (error: any) {
       console.error('Failed to update inning:', error);
       toast.error(error.response?.data?.userMessage || 'Failed to update inning');
     } finally {
       setSaving(false);
+      setLoading(false);
     }
   };
 
