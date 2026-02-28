@@ -721,7 +721,31 @@ export class LiveMatchService {
     return response.data?.data?.result || response.data?.result;
   }
 
+  static async getPartnerships(matchId: string, inningNumber?: number): Promise<any[]> {
+    try {
+      const response = await axiosInstance.get(
+        `/admin/matches/${matchId}/partnerships`,
+        { params: { inningNumber } }
+      );
+      return response.data?.data?.result || response.data?.result || [];
+    } catch (error) {
+      console.error('Error fetching partnerships:', error);
+      return [];
+    }
+  }
 
+  static async upsertPartnerships(matchId: string, inningNumber: number, partnerships: any[]): Promise<any> {
+    try {
+      const response = await axiosInstance.post(
+        `/admin/matches/${matchId}/partnerships`,
+        { inningNumber, partnerships }
+      );
+      return response.data?.data?.result || response.data?.result;
+    } catch (error) {
+      console.error('Error saving partnerships:', error);
+      throw error;
+    }
+  }
 }
 
 

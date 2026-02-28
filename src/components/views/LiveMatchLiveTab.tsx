@@ -1,4 +1,4 @@
-import { MoreVertical, Pencil, Plus, RefreshCw, Save } from "lucide-react";
+import { MoreVertical, Pencil, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useSimpleKeyboardScore } from "../../hooks/useSimpleKeyboardScore";
@@ -144,6 +144,9 @@ export function LiveMatchLiveTab({
   const [pendingTeam, setPendingTeam] = useState<string | null>(null);
   const [pendingTeamId, setPendingTeamId] = useState<string | null>(null);
   const [showTeamConfirm, setShowTeamConfirm] = useState(false);
+
+  const [showRemovePlayerConfirm, setShowRemovePlayerConfirm] = useState(false);
+  const [playerToRemove, setPlayerToRemove] = useState<{ id: number; name: string; type: 'batsman' | 'bowler' } | null>(null);
 
   // Scoreboard related states
   const [comment2, setComment2] = useState("");
@@ -1442,6 +1445,28 @@ export function LiveMatchLiveTab({
     })();
   };
 
+  const handleRequestRemovePlayer = (id: number, name: string, type: 'batsman' | 'bowler') => {
+    setPlayerToRemove({ id, name, type });
+    setShowRemovePlayerConfirm(true);
+  };
+
+  const handleConfirmRemovePlayer = async () => {
+    if (!playerToRemove) return;
+
+    try {
+      setSaving(true);
+      if (playerToRemove.type === 'batsman') {
+        await toggleBatsmanScorecard(playerToRemove.id);
+      } else {
+        await toggleBowlerScorecard(playerToRemove.id);
+      }
+    } finally {
+      setSaving(false);
+      setShowRemovePlayerConfirm(false);
+      setPlayerToRemove(null);
+    }
+  };
+
   const setBatsmanStatus = async (id: number, status: 'batting' | 'out' | 'yetToBat') => {
     const batsman = batsmen.find(b => b.id === id);
     if (!batsman || !batsman._playerId) return;
@@ -2532,6 +2557,17 @@ export function LiveMatchLiveTab({
               confirmLabel="Update Toss"
             />
 
+            <ConfirmDialog
+              open={showRemovePlayerConfirm}
+              onOpenChange={setShowRemovePlayerConfirm}
+              title={`Remove ${playerToRemove?.name} from Scorecard?`}
+              description={`Are you sure you want to remove ${playerToRemove?.name} from the scorecard? Their current stats will be saved, but they will no longer appear in the active list.`}
+              onConfirm={handleConfirmRemovePlayer}
+              confirmLabel="Remove Player"
+              variant="destructive"
+              loading={saving}
+            />
+
             <DismissalTypeSelector
               open={showDismissalSelector}
               onClose={() => {
@@ -2923,7 +2959,7 @@ export function LiveMatchLiveTab({
                     <TableHead className="w-[40px] p-2 text-center text-xs font-bold text-slate-600">M</TableHead>
                     <TableHead className="w-[40px] p-2 text-center text-xs font-bold text-slate-600">R</TableHead>
                     <TableHead className="w-[40px] p-2 text-center text-xs font-bold text-slate-600">W</TableHead>
-                    <TableHead className="w-[30px] p-2"></TableHead>
+                    <TableHead className="w-[70px] p-2 text-center text-xs font-bold text-slate-600">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -3008,44 +3044,57 @@ export function LiveMatchLiveTab({
                         ) : "-"}
                       </TableCell>
                       <TableCell className="p-2 text-center cursor-pointer text-slate-400">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                              <span className="sr-only">Open menu</span>
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent side="left" align="start" className="-translate-x-[120px]">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            {bowler.inScorecard ? (
-                              <DropdownMenuItem onClick={() => toggleBowlerScorecard(bowler.id)}>
-                                Remove from Scorecard
-                              </DropdownMenuItem>
-                            ) : (
-                              <DropdownMenuItem onClick={() => addPlayerToScorecard(bowler._playerId, bowler.name, 'bowler')}>
-                                Add to Scorecard
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={async () => {
-                                try {
-                                  setSaving(true);
-                                  await LiveMatchService.setCurrentBowler(matchId, parseInt(currentInning), bowler._playerId);
-                                  toast.success(`${bowler.name} set as current bowler`);
-                                  await loadLiveData(true);
-                                } catch (error: any) {
-                                  toast.error(error.message || 'Failed to set current bowler');
-                                } finally {
-                                  setSaving(false);
-                                }
-                              }}
-                              disabled={!bowler.inScorecard}
+                        <div className="flex items-center justify-center gap-1">
+                          {bowler.inScorecard && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => handleRequestRemovePlayer(bowler.id, bowler.name, 'bowler')}
+                              title="Remove from Scorecard"
                             >
-                              Set as Current Bowler
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <span className="sr-only">Open menu</span>
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent side="left" align="start" className="-translate-x-[120px]">
+                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                              {bowler.inScorecard ? (
+                                <DropdownMenuItem onClick={() => handleRequestRemovePlayer(bowler.id, bowler.name, 'bowler')}>
+                                  Remove from Scorecard
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem onClick={() => addPlayerToScorecard(bowler._playerId, bowler.name, 'bowler')}>
+                                  Add to Scorecard
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={async () => {
+                                  try {
+                                    setSaving(true);
+                                    await LiveMatchService.setBowler(matchId, parseInt(currentInning), bowler._playerId);
+                                    toast.success(`${bowler.name} set as active bowler`);
+                                    await loadLiveData(true);
+                                  } catch (error: any) {
+                                    toast.error(error.message || 'Failed to set bowler');
+                                  } finally {
+                                    setSaving(false);
+                                  }
+                                }}
+                                disabled={!bowler.inScorecard}
+                              >
+                                Set as Active Bowler
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -3126,7 +3175,7 @@ export function LiveMatchLiveTab({
                     <TableHead className="w-[30px] p-2 text-center text-xs font-bold text-slate-600">6s</TableHead>
                     <TableHead className="w-[40px] p-2 text-center text-xs font-bold text-slate-600">TO</TableHead>
                     <TableHead className="w-[40px] p-2 text-center text-xs font-bold text-slate-600">TR</TableHead>
-                    <TableHead className="w-[20px] p-2"></TableHead>
+                    <TableHead className="w-[70px] p-2 text-center text-xs font-bold text-slate-600">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -3285,77 +3334,90 @@ export function LiveMatchLiveTab({
                         ) : "-"}
                       </TableCell>
                       <TableCell className="p-2 text-center cursor-pointer text-slate-400">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                              <span className="sr-only">Open menu</span>
-                              <MoreVertical className="h-4 w-4" />
+                        <div className="flex items-center justify-center gap-1">
+                          {batsman.inScorecard && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => handleRequestRemovePlayer(batsman.id, batsman.name, 'batsman')}
+                              title="Remove from Scorecard"
+                            >
+                              <Trash2 className="h-4 w-4" />
                             </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent side="left" align="start" className="-translate-x-[120px]">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            {batsman.inScorecard ? (
-                              <DropdownMenuItem onClick={() => toggleBatsmanScorecard(batsman.id)}>
-                                Remove from Scorecard
+                          )}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <span className="sr-only">Open menu</span>
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent side="left" align="start" className="-translate-x-[120px]">
+                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                              {batsman.inScorecard ? (
+                                <DropdownMenuItem onClick={() => handleRequestRemovePlayer(batsman.id, batsman.name, 'batsman')}>
+                                  Remove from Scorecard
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem onClick={() => addPlayerToScorecard(batsman._playerId, batsman.name, 'batsman')}>
+                                  Add to Scorecard
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuLabel>Strike Position</DropdownMenuLabel>
+                              <DropdownMenuItem
+                                onClick={async () => {
+                                  try {
+                                    setSaving(true);
+                                    await LiveMatchService.setStriker(matchId, parseInt(currentInning), batsman._playerId);
+                                    toast.success(`${batsman.name} set as striker`);
+                                    await loadLiveData(true);
+                                  } catch (error: any) {
+                                    toast.error(error.message || 'Failed to set striker');
+                                  } finally {
+                                    setSaving(false);
+                                  }
+                                }}
+                                disabled={!batsman.inScorecard || batsman.status === 'out'}
+                              >
+                                Set as Striker (On Strike)
                               </DropdownMenuItem>
-                            ) : (
-                              <DropdownMenuItem onClick={() => addPlayerToScorecard(batsman._playerId, batsman.name, 'batsman')}>
-                                Add to Scorecard
+                              <DropdownMenuItem
+                                onClick={async () => {
+                                  try {
+                                    setSaving(true);
+                                    await LiveMatchService.setNonStriker(matchId, parseInt(currentInning), batsman._playerId);
+                                    toast.success(`${batsman.name} set as non-striker`);
+                                    await loadLiveData(true);
+                                  } catch (error: any) {
+                                    toast.error(error.message || 'Failed to set non-striker');
+                                  } finally {
+                                    setSaving(false);
+                                  }
+                                }}
+                                disabled={!batsman.inScorecard || batsman.status === 'out'}
+                              >
+                                Set as Non-Striker
                               </DropdownMenuItem>
-                            )}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuLabel>Strike Position</DropdownMenuLabel>
-                            <DropdownMenuItem
-                              onClick={async () => {
-                                try {
-                                  setSaving(true);
-                                  await LiveMatchService.setStriker(matchId, parseInt(currentInning), batsman._playerId);
-                                  toast.success(`${batsman.name} set as striker`);
-                                  await loadLiveData(true);
-                                } catch (error: any) {
-                                  toast.error(error.message || 'Failed to set striker');
-                                } finally {
-                                  setSaving(false);
-                                }
-                              }}
-                              disabled={!batsman.inScorecard || batsman.status === 'out'}
-                            >
-                              Set as Striker (On Strike)
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={async () => {
-                                try {
-                                  setSaving(true);
-                                  await LiveMatchService.setNonStriker(matchId, parseInt(currentInning), batsman._playerId);
-                                  toast.success(`${batsman.name} set as non-striker`);
-                                  await loadLiveData(true);
-                                } catch (error: any) {
-                                  toast.error(error.message || 'Failed to set non-striker');
-                                } finally {
-                                  setSaving(false);
-                                }
-                              }}
-                              disabled={!batsman.inScorecard || batsman.status === 'out'}
-                            >
-                              Set as Non-Striker
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuLabel>Status</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => setBatsmanStatus(batsman.id, 'batting')} disabled={!batsman.inScorecard}>
-                              Set Batting
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setBatsmanStatus(batsman.id, 'out')} disabled={!batsman.inScorecard}>
-                              Set Out
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setBatsmanStatus(batsman.id, 'yetToBat')} disabled={!batsman.inScorecard}>
-                              Set Yet To Bat
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => setAsLastWicket(batsman.id)} disabled={!batsman.inScorecard || batsman.status !== 'out'}>
-                              Set as Last Wicket
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuLabel>Status</DropdownMenuLabel>
+                              <DropdownMenuItem onClick={() => setBatsmanStatus(batsman.id, 'batting')} disabled={!batsman.inScorecard}>
+                                Set Batting
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setBatsmanStatus(batsman.id, 'out')} disabled={!batsman.inScorecard}>
+                                Set Out
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setBatsmanStatus(batsman.id, 'yetToBat')} disabled={!batsman.inScorecard}>
+                                Set Yet To Bat
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => setAsLastWicket(batsman.id)} disabled={!batsman.inScorecard || batsman.status !== 'out'}>
+                                Set as Last Wicket
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

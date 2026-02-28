@@ -1,7 +1,6 @@
-import { useState } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -25,57 +24,34 @@ interface Partnership {
   wicket: string;
 }
 
+interface Inning {
+  _id?: string;
+  inningNumber: number;
+  type?: 'regular' | 'super_over';
+  superOverNumber?: number;
+}
+
 interface LiveMatchPartnershipTabProps {
   partnerships: Partnership[];
-  onPartnershipsChange: (partnerships: Partnership[]) => void;
+  selectedInning: number;
+  onInningChange: (inning: number) => void;
+  innings: Inning[];
+  onSave: () => void;
+  onAddRow: (afterId?: number) => void;
+  onDeleteRow: (id: number) => void;
+  onFieldChange: (id: number, field: string, value: string) => void;
 }
 
 export function LiveMatchPartnershipTab({
   partnerships,
-  onPartnershipsChange,
+  selectedInning,
+  onInningChange,
+  innings,
+  onSave,
+  onAddRow,
+  onDeleteRow,
+  onFieldChange,
 }: LiveMatchPartnershipTabProps) {
-  const [selectedInning, setSelectedInning] = useState("1");
-
-  const handleAddPartnershipRow = (afterId?: number) => {
-    const newRow: Partnership = {
-      id: Math.max(...partnerships.map((p) => p.id), 0) + 1,
-      batsman: "",
-      nbKey: "",
-      obKey: "",
-      nbName: "",
-      obName: "",
-      nbRun: "",
-      obRun: "",
-      nbBall: "",
-      obBall: "",
-      score: "",
-      wicket: "",
-    };
-
-    if (afterId) {
-      const afterIndex = partnerships.findIndex((p) => p.id === afterId);
-      const newPartnerships = [...partnerships];
-      newPartnerships.splice(afterIndex + 1, 0, newRow);
-      onPartnershipsChange(newPartnerships);
-    } else {
-      onPartnershipsChange([...partnerships, newRow]);
-    }
-  };
-
-  const handleDeletePartnershipRow = (id: number) => {
-    onPartnershipsChange(partnerships.filter((p) => p.id !== id));
-  };
-
-  const handlePartnershipChange = (
-    id: number,
-    field: string,
-    value: string
-  ) => {
-    onPartnershipsChange(
-      partnerships.map((p) => (p.id === id ? { ...p, [field]: value } : p))
-    );
-  };
-
   return (
     <div className="flex flex-col h-full">
       {/* Header Section */}
@@ -88,19 +64,48 @@ export function LiveMatchPartnershipTab({
             <span className="text-sm text-slate-700 dark:text-slate-300">
               Inning
             </span>
-            <Select value={selectedInning} onValueChange={setSelectedInning}>
-              <SelectTrigger className="w-20 h-8 text-sm">
+            <Select
+              value={selectedInning.toString()}
+              onValueChange={(val) => onInningChange(parseInt(val))}
+            >
+              <SelectTrigger className="w-24 h-8 text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="1">1</SelectItem>
-                <SelectItem value="2">2</SelectItem>
+                {innings.length > 0 ? (
+                  innings.map((inning) => (
+                    <SelectItem key={inning.inningNumber} value={inning.inningNumber.toString()}>
+                      {inning.type === 'super_over'
+                        ? `SO ${inning.superOverNumber || (inning.inningNumber > 2 ? Math.ceil((inning.inningNumber - 2) / 2) : 1)} (${inning.inningNumber})`
+                        : `Inn ${inning.inningNumber}`}
+                    </SelectItem>
+                  ))
+                ) : (
+                  [1, 2, 3, 4].map(num => (
+                    <SelectItem key={num} value={num.toString()}>
+                      Inn {num}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
           </div>
-          <Button variant="outline" size="sm" className="text-xs h-8">
-            <Pencil className="h-3.5 w-3.5 mr-1.5" />
-            Edit
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs h-8 border-blue-200 text-blue-700 hover:bg-blue-50"
+            onClick={() => onAddRow()}
+          >
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            Add Row
+          </Button>
+          <Button
+            variant="default"
+            size="sm"
+            className="text-xs h-8 bg-blue-600 hover:bg-blue-700 text-white"
+            onClick={onSave}
+          >
+            Save Partnerships
           </Button>
           <Button variant="outline" size="sm" className="text-xs h-8">
             Preview Partnership
@@ -160,7 +165,7 @@ export function LiveMatchPartnershipTab({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleAddPartnershipRow(partnership.id)}
+                        onClick={() => onAddRow(partnership.id)}
                         className="h-6 w-6 p-0 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                       >
                         <Plus className="h-3.5 w-3.5" />
@@ -168,7 +173,7 @@ export function LiveMatchPartnershipTab({
                       <Input
                         value={partnership.batsman}
                         onChange={(e) =>
-                          handlePartnershipChange(
+                          onFieldChange(
                             partnership.id,
                             "batsman",
                             e.target.value
@@ -185,7 +190,7 @@ export function LiveMatchPartnershipTab({
                         variant="ghost"
                         size="sm"
                         onClick={() =>
-                          handleDeletePartnershipRow(partnership.id)
+                          onDeleteRow(partnership.id)
                         }
                         className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
                       >
@@ -194,7 +199,7 @@ export function LiveMatchPartnershipTab({
                       <Input
                         value={partnership.nbKey}
                         onChange={(e) =>
-                          handlePartnershipChange(
+                          onFieldChange(
                             partnership.id,
                             "nbKey",
                             e.target.value
@@ -209,7 +214,7 @@ export function LiveMatchPartnershipTab({
                     <Input
                       value={partnership.obKey}
                       onChange={(e) =>
-                        handlePartnershipChange(
+                        onFieldChange(
                           partnership.id,
                           "obKey",
                           e.target.value
@@ -223,7 +228,7 @@ export function LiveMatchPartnershipTab({
                     <Input
                       value={partnership.nbName}
                       onChange={(e) =>
-                        handlePartnershipChange(
+                        onFieldChange(
                           partnership.id,
                           "nbName",
                           e.target.value
@@ -237,7 +242,7 @@ export function LiveMatchPartnershipTab({
                     <Input
                       value={partnership.obName}
                       onChange={(e) =>
-                        handlePartnershipChange(
+                        onFieldChange(
                           partnership.id,
                           "obName",
                           e.target.value
@@ -251,7 +256,7 @@ export function LiveMatchPartnershipTab({
                     <Input
                       value={partnership.nbRun}
                       onChange={(e) =>
-                        handlePartnershipChange(
+                        onFieldChange(
                           partnership.id,
                           "nbRun",
                           e.target.value
@@ -265,7 +270,7 @@ export function LiveMatchPartnershipTab({
                     <Input
                       value={partnership.obRun}
                       onChange={(e) =>
-                        handlePartnershipChange(
+                        onFieldChange(
                           partnership.id,
                           "obRun",
                           e.target.value
@@ -279,7 +284,7 @@ export function LiveMatchPartnershipTab({
                     <Input
                       value={partnership.nbBall}
                       onChange={(e) =>
-                        handlePartnershipChange(
+                        onFieldChange(
                           partnership.id,
                           "nbBall",
                           e.target.value
@@ -293,7 +298,7 @@ export function LiveMatchPartnershipTab({
                     <Input
                       value={partnership.obBall}
                       onChange={(e) =>
-                        handlePartnershipChange(
+                        onFieldChange(
                           partnership.id,
                           "obBall",
                           e.target.value
@@ -307,7 +312,7 @@ export function LiveMatchPartnershipTab({
                     <Input
                       value={partnership.score}
                       onChange={(e) =>
-                        handlePartnershipChange(
+                        onFieldChange(
                           partnership.id,
                           "score",
                           e.target.value
@@ -321,7 +326,7 @@ export function LiveMatchPartnershipTab({
                     <Input
                       value={partnership.wicket}
                       onChange={(e) =>
-                        handlePartnershipChange(
+                        onFieldChange(
                           partnership.id,
                           "wicket",
                           e.target.value

@@ -345,50 +345,60 @@ export function LiveMatchView() {
   const [isConnected, setIsConnected] = useState(true);
 
   // Partnership state
-  const [partnerships, setPartnerships] = useState([
-    {
-      id: 1,
-      batsman: '104',
-      nbKey: 'PA',
-      obKey: 'SU',
-      nbName: '',
-      obName: '',
-      nbRun: '',
-      obRun: '',
-      nbBall: '',
-      obBall: '',
-      score: '',
-      wicket: '',
-    },
-    {
-      id: 2,
-      batsman: '',
-      nbKey: '',
-      obKey: '',
-      nbName: '',
-      obName: '',
-      nbRun: '',
-      obRun: '',
-      nbBall: '',
-      obBall: '',
-      score: '',
-      wicket: '',
-    },
-    {
-      id: 3,
-      batsman: '',
-      nbKey: '',
-      obKey: '',
-      nbName: '',
-      obName: '',
-      nbRun: '',
-      obRun: '',
-      nbBall: '',
-      obBall: '',
-      score: '',
-      wicket: '',
-    },
-  ]);
+  const [selectedPartnershipInning, setSelectedPartnershipInning] = useState<number>(1);
+  const [partnerships, setPartnerships] = useState<any[]>([]);
+  const [matchInnings, setMatchInnings] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchInnings = async () => {
+      if (!id) return;
+      try {
+        const data = await LiveMatchService.getInnings(id);
+        if (data && Array.isArray(data)) {
+          setMatchInnings(data);
+        }
+      } catch (error) {
+        console.error("Error fetching innings for partnerships:", error);
+      }
+    };
+    fetchInnings();
+  }, [id]);
+
+  // Sync selected inning with live status when it loads
+  useEffect(() => {
+    if (liveStatus?.currentInning && selectedPartnershipInning === 1) {
+      // Only auto-switch if we are still on the default (Inning 1)
+      setSelectedPartnershipInning(liveStatus.currentInning);
+    }
+  }, [liveStatus?.currentInning]);
+
+  useEffect(() => {
+    const fetchPartnerships = async () => {
+      if (!id || activeTab !== 'partnership') return;
+      try {
+        const data = await LiveMatchService.getPartnerships(id, selectedPartnershipInning);
+        if (data && Array.isArray(data)) {
+          setPartnerships(data.map((p, idx) => ({ ...p, id: p.id || idx + 1 })));
+        } else {
+          setPartnerships([]);
+        }
+      } catch (error) {
+        console.error("Error fetching partnerships:", error);
+      }
+    };
+    fetchPartnerships();
+  }, [id, selectedPartnershipInning, activeTab]);
+
+  const handleSavePartnerships = async () => {
+    if (!id) return;
+    try {
+      await LiveMatchService.upsertPartnerships(id, selectedPartnershipInning, partnerships);
+      toast.success("Partnerships saved successfully");
+    } catch (error) {
+      console.error("Error saving partnerships:", error);
+      toast.error("Failed to save partnerships");
+    }
+  };
 
 
 
@@ -880,7 +890,13 @@ export function LiveMatchView() {
             {activeTab === "partnership" && (
               <LiveMatchPartnershipTab
                 partnerships={partnerships}
-                onPartnershipsChange={setPartnerships}
+                selectedInning={selectedPartnershipInning}
+                onInningChange={setSelectedPartnershipInning}
+                innings={matchInnings}
+                onSave={handleSavePartnerships}
+                onAddRow={handleAddPartnershipRow}
+                onDeleteRow={handleDeletePartnershipRow}
+                onFieldChange={handlePartnershipChange}
               />
             )}
           </Tabs>
