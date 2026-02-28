@@ -182,7 +182,7 @@ export function LiveMatchCommentaryTab({
       const ballIndex = overCounters[overNumber];
       return {
         ...item,
-        calculatedIndex: `${overNumber}.${ballIndex}`,
+        calculatedIndex: `${overNumber - 1}.${ballIndex}`,
         calculatedResult: item.ballLabel || (type === 'wicket' ? 'W' : '')
       };
     });
