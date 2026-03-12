@@ -160,7 +160,7 @@ export function LiveMatchCommentaryTab({
       new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
 
-    const overCounters: Record<number, number> = {};
+    const overCounters: Record<string, number> = {};
 
     const withLabels = sorted.map(item => {
       const type = item.type || 'ball';
@@ -173,13 +173,16 @@ export function LiveMatchCommentaryTab({
       }
 
       const overNumber = item.overNumber || 0;
-      if (overCounters[overNumber] === undefined) overCounters[overNumber] = 0;
+      const inningId = item.inningId || 'default';
+      const overKey = `${inningId}-${overNumber}`;
+
+      if (overCounters[overKey] === undefined) overCounters[overKey] = 0;
 
       if (item.isLegal) {
-        overCounters[overNumber]++;
+        overCounters[overKey]++;
       }
 
-      const ballIndex = overCounters[overNumber];
+      const ballIndex = overCounters[overKey];
       return {
         ...item,
         calculatedIndex: `${overNumber - 1}.${ballIndex}`,
