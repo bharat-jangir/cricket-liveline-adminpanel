@@ -280,6 +280,7 @@ export class LiveMatchService {
   static async getMatchDetails(matchId: string): Promise<any> {
     try {
       const response = await axiosInstance.get(`/admin/matches/${matchId}/match-details`);
+      console.log(response.data);
       return response.data?.data?.result || response.data?.result || {};
     } catch (error: any) {
       console.error('Error fetching match details:', error);

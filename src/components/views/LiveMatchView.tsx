@@ -50,6 +50,7 @@ import { LiveMatchLiveTab } from "./LiveMatchLiveTab";
 import { LiveMatchCommentaryTab } from "./LiveMatchCommentaryTab";
 import { LiveMatchAPTab } from "./LiveMatchAPTab";
 import { LiveMatchPartnershipTab } from "./LiveMatchPartnershipTab";
+import { useLiveMatchSocket } from "../../hooks/useLiveMatchSocket";
 
 export function LiveMatchView() {
   const { id } = useParams();
@@ -58,6 +59,12 @@ export function LiveMatchView() {
   const [loading, setLoading] = useState(true);
   const [matchData, setMatchData] = useState<Match | null>(null);
   const [liveStatus, setLiveStatus] = useState<any>(null);
+
+  // Use the local socket hook to keep live status updated automatically
+  const { isConnected } = useLiveMatchSocket(id || "", () => {
+    // When a match_update or match_reset event occurs, just refetch
+    loadLiveStatus();
+  });
 
   // Fetch match data
   useEffect(() => {
@@ -342,7 +349,6 @@ export function LiveMatchView() {
   const [teamFormIndia, setTeamFormIndia] = useState("");
   const [headToHeadTeam1, setHeadToHeadTeam1] = useState("3");
   const [headToHeadTeam2, setHeadToHeadTeam2] = useState("7");
-  const [isConnected, setIsConnected] = useState(true);
 
   // Partnership state
   const [selectedPartnershipInning, setSelectedPartnershipInning] = useState<number>(1);
