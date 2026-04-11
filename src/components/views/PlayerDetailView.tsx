@@ -25,7 +25,7 @@ import { calculateProgressFromFormState } from '../../utils/playerProgress';
 export function PlayerDetailView() {
     const { playerId } = useParams();
     const navigate = useNavigate();
-    const isNew = playerId === 'new';
+    const isNew = !playerId || playerId === 'new';
 
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);

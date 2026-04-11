@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:5003'; // Point to Gateway/Socket Service
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5002'; // Point to Socket Service
 
 export function useLiveMatchSocket(matchId: string, onUpdate: () => void) {
   const socketRef = useRef<Socket | null>(null);
