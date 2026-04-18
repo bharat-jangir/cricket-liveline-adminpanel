@@ -61,7 +61,7 @@ interface TransformedMatch {
 
 export function MatchesView() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState("all");
+  const [tab, setTab] = useState("live");
   const [loading, setLoading] = useState(true);
   const [matches, setMatches] = useState<TransformedMatch[]>([]);
   const [apiMatches, setApiMatches] = useState<Match[]>([]);
