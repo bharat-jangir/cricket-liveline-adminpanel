@@ -89,6 +89,7 @@ interface LiveMatchLiveTabProps {
   };
   matchFormat?: 'test' | 'odi' | 't20' | 't20i' | 't10' | 'hundred';
   liveStatus?: any;
+  scorecardDelta?: any;
   ballsPerOver?: number;
   oversPerInning?: number;
   onMatchRefresh?: () => void;
@@ -99,6 +100,7 @@ export function LiveMatchLiveTab({
   matchData,
   matchFormat,
   liveStatus: initialLiveStatus,
+  scorecardDelta,
   ballsPerOver: propBallsPerOver,
   oversPerInning: propOversPerInning,
   onMatchRefresh
@@ -241,8 +243,9 @@ export function LiveMatchLiveTab({
       console.log('Simple score event processed successfully:', eventString, response);
       // Set current ball for immediate visual confirmation
       setCurrentBall(eventString === 'UNDO' ? 'confirming' : eventString);
-      // Silently refresh data to update UI with latest state from backend
-      await loadLiveData(true);
+      // We no longer need to manually loadLiveData(true) because the socket 
+      // will emit scoreUpdate and scorecard_delta which the parent component
+      // passes down as props, triggering the reactive effects below.
     },
     onError: (eventString, error) => {
       console.error('Failed to process simple score event:', eventString, error);
@@ -724,37 +727,20 @@ export function LiveMatchLiveTab({
     }
   }, [matchId, currentInning, loadLiveData]);
 
-  // Load match squads when teams change
-  useEffect(() => {
-    loadSquads();
-  }, [loadSquads]);
-
-  // Load live status and scorecard
-  useEffect(() => {
-    if (matchId) {
-      loadLiveData();
-      loadOverHistory();
-      loadSquads();
-      loadAllInnings();
-
-      // Sync tossInfo from matchData if available
-      if (matchData?.toss) {
-        const info = typeof matchData.toss === 'object'
-          ? (matchData as any).toss?.tossText
-          : matchData.toss;
-        setTossInfo(info || 'Toss Pending');
-      }
-      // ... (rest of the effect)
-    }
-  }, [matchId, currentInning, loadLiveData, loadOverHistory, loadSquads, matchData]);
-
   const transformScorecardToState = useCallback((data: Scorecard, currentStatus?: any) => {
     const statusToUse = currentStatus || liveStatus;
-    const strikerId = statusToUse?.currentStrikerId ? getPlayerIdString(statusToUse.currentStrikerId) : null;
-    const nonStrikerId = statusToUse?.currentNonStrikerId ? getPlayerIdString(statusToUse.currentNonStrikerId) : null;
-    const currentBowlerId = statusToUse?.currentBowlerId ? getPlayerIdString(statusToUse.currentBowlerId) : null;
+    // Support both formats: socket scoreUpdate (striker.playerId) and liveStatus (currentStrikerId)
+    const rawStrikerId = statusToUse?.currentStrikerId || statusToUse?.striker?.playerId;
+    const rawNonStrikerId = statusToUse?.currentNonStrikerId || statusToUse?.nonStriker?.playerId;
+    const rawBowlerId = statusToUse?.currentBowlerId || statusToUse?.bowler?.playerId;
+    const strikerId = rawStrikerId ? getPlayerIdString(rawStrikerId) : null;
+    const nonStrikerId = rawNonStrikerId ? getPlayerIdString(rawNonStrikerId) : null;
+    const currentBowlerId = rawBowlerId ? getPlayerIdString(rawBowlerId) : null;
 
-    if (!data || !data.batting || !data.bowling) {
+    const battingData = data.batting || (data as any).inning?.batting || (data as any).result?.batting || [];
+    const bowlingData = data.bowling || (data as any).inning?.bowling || (data as any).result?.bowling || [];
+
+    if (!battingData.length && !bowlingData.length && !data.inning) {
       setBatsmen([]);
       setBowlers([]);
       return;
@@ -764,7 +750,7 @@ export function LiveMatchLiveTab({
     const processedBatsmanIds = new Set<string>();
 
     // 1. Transform active batting scorecard entries
-    const scorecardBatsmen: Batsman[] = data.batting.map((entry, index) => {
+    const scorecardBatsmen: Batsman[] = battingData.map((entry: any, index: number) => {
       const pId = typeof entry.playerId === 'object' ? entry.playerId._id : entry.playerId;
       processedBatsmanIds.add(String(pId));
 
@@ -780,9 +766,20 @@ export function LiveMatchLiveTab({
         status = 'batting';
       }
 
+      // Robust Name Resolution: Look up in squad if playerId was just an ID string
+      let name = 'Unknown';
+      if (typeof entry.playerId === 'object' && entry.playerId !== null) {
+        name = entry.playerId.name || entry.playerId.fullName || 'Unknown';
+      } else if (entry.name) {
+        name = entry.name;
+      } else {
+        const squadPlayer = battingSquad.find(p => String(p._id) === String(pId));
+        if (squadPlayer) name = squadPlayer.name;
+      }
+
       return {
         id: index + 1,
-        name: typeof entry.playerId === 'object' ? (entry.playerId.name || entry.playerId.fullName || 'Unknown') : 'Unknown',
+        name,
         dismissal: entry.dismissalText || undefined,
         runs: entry.runs ?? 0,
         balls: entry.balls ?? 0,
@@ -819,16 +816,27 @@ export function LiveMatchLiveTab({
     const processedBowlerIds = new Set<string>();
 
     // 3. Transform active bowling scorecard entries
-    const scorecardBowlers: Bowler[] = data.bowling.map((entry, index) => {
+    const scorecardBowlers: Bowler[] = bowlingData.map((entry: any, index: number) => {
       const pId = typeof entry.playerId === 'object' ? entry.playerId._id : entry.playerId;
       processedBowlerIds.add(String(pId));
 
       const inScorecard = entry.isVisible !== undefined ? entry.isVisible : true;
       const isCurrentBowler = entry.isCurrentBowler === true || (currentBowlerId && String(pId) === String(currentBowlerId));
 
+      // Robust Name Resolution for Bowlers
+      let name = 'Unknown';
+      if (typeof entry.playerId === 'object' && entry.playerId !== null) {
+        name = entry.playerId.name || entry.playerId.fullName || 'Unknown';
+      } else if (entry.name) {
+        name = entry.name;
+      } else {
+        const squadPlayer = bowlingSquad.find(p => String(p._id) === String(pId));
+        if (squadPlayer) name = squadPlayer.name;
+      }
+
       return {
         id: index + 1,
-        name: typeof entry.playerId === 'object' ? (entry.playerId.name || entry.playerId.fullName || 'Unknown') : 'Unknown',
+        name,
         overs: entry.overs !== undefined ? String(entry.overs) : '0.0',
         maidens: entry.maidens ?? 0,
         runs: entry.runs ?? 0,
@@ -871,7 +879,7 @@ export function LiveMatchLiveTab({
       });
     } else {
       // Fallback to logical calculation if DB doesn't have it yet
-      const dismissedBatsmen = [...data.batting]
+      const dismissedBatsmen = [...battingData]
         .filter(b => b.isOut)
         .sort((a, b) => (b.battingPosition || 0) - (a.battingPosition || 0));
 
@@ -909,6 +917,146 @@ export function LiveMatchLiveTab({
     setBatsmen(transformedBatsmen);
     setBowlers(transformedBowlers);
   }, [battingSquad, bowlingSquad, liveStatus, getPlayerIdString]);
+
+  // Re-transform scorecard when squads are loaded
+  useEffect(() => {
+    if (scorecard && (battingSquad.length > 0 || bowlingSquad.length > 0)) {
+      transformScorecardToState(scorecard);
+    }
+  }, [battingSquad, bowlingSquad, scorecard, transformScorecardToState]);
+
+  // Synchronize local liveStatus with initialLiveStatus prop (fed by sockets in parent)
+  useEffect(() => {
+    if (initialLiveStatus) {
+      console.log('[LiveMatchLiveTab] Syncing prop liveStatus into local state');
+      setLiveStatus(prev => ({
+        ...prev,
+        ...(initialLiveStatus as any)
+      }));
+
+      // Update basic fields for immediate display
+      if (initialLiveStatus.score) {
+        const [runs, wickets] = initialLiveStatus.score.split('/');
+        setRuns(runs || '0');
+        setWickets(wickets || '0');
+      }
+      if (initialLiveStatus.overs) setOvers(initialLiveStatus.overs);
+      if (initialLiveStatus.currentBall !== undefined) setCurrentBall(String(initialLiveStatus.currentBall));
+      if (initialLiveStatus.currentInning) setCurrentInning(String(initialLiveStatus.currentInning));
+
+      // Synchronize over history instantly using socket data (no API call)
+      // Re-transform the current scorecard with updated striker/bowler IDs so highlights update
+      setScorecard(prev => {
+        if (prev) setTimeout(() => transformScorecardToState(prev, initialLiveStatus), 0);
+        return prev;
+      });
+
+      if (initialLiveStatus.recentBalls && initialLiveStatus.overs) {
+        const currentOverNumber = Math.ceil(parseFloat(initialLiveStatus.overs));
+        if (currentOverNumber > 0) {
+          setOverHistory(prev => {
+            const newHistory = [...prev];
+            // Filter socket balls to only include those from the current over AND of type 'ball'
+            const currentOverBalls = initialLiveStatus.recentBalls
+              .filter((ball: any) => {
+                const bOver = typeof ball === 'object' ? ball.overNumber : null;
+                const isBall = typeof ball === 'object' ? ball.type === 'ball' : true;
+                return bOver === currentOverNumber && isBall;
+              })
+              .map((ball: any) => {
+                // Ensure ballResult is set for existing rendering logic
+                if (typeof ball === 'object' && !ball.ballResult && ball.ballLabel) {
+                  return { ...ball, ballResult: ball.ballLabel };
+                }
+                return ball;
+              });
+
+            if (currentOverBalls.length === 0) return prev;
+
+            const existingIdx = newHistory.findIndex(oh => oh.over === currentOverNumber);
+            if (existingIdx !== -1) {
+              // Update existing over row
+              newHistory[existingIdx] = { ...newHistory[existingIdx], runs: currentOverBalls };
+            } else {
+              // Prepend new over row if it's the latest
+              newHistory.unshift({ over: currentOverNumber, runs: currentOverBalls });
+              // Keep it sorted
+              newHistory.sort((a, b) => b.over - a.over);
+            }
+            return newHistory;
+          });
+        }
+      }
+    }
+  }, [initialLiveStatus, transformScorecardToState]);
+
+  // Synchronize scorecard with scorecardDelta prop (fed by sockets in parent)
+  useEffect(() => {
+    if (!scorecardDelta || scorecardDelta.inningNumber !== parseInt(currentInning)) return;
+    console.log('[LiveMatchLiveTab] Syncing scorecard delta:', scorecardDelta);
+
+    // Update extras
+    if (scorecardDelta.extras) {
+      setExtras({
+        ex: scorecardDelta.extras.total || 0,
+        w: scorecardDelta.extras.wides || 0,
+        nb: scorecardDelta.extras.noBalls || 0,
+        lb: scorecardDelta.extras.legByes || 0,
+        b: scorecardDelta.extras.byes || 0,
+        p: scorecardDelta.extras.penalties || 0,
+      });
+    }
+
+    // Merge delta batting/bowling with current scorecard state, then re-transform.
+    // IMPORTANT: do NOT include 'scorecard' in deps — use functional setter to read latest scorecard
+    // without triggering a re-run of this effect every time scorecard changes.
+    setScorecard(prev => {
+      if (!prev) return prev;
+
+      // Safe merge: only use delta arrays if they actually contain players
+      const mergedBatting = (scorecardDelta.batting && scorecardDelta.batting.length > 0)
+        ? scorecardDelta.batting
+        : prev.batting;
+      const mergedBowling = (scorecardDelta.bowling && scorecardDelta.bowling.length > 0)
+        ? scorecardDelta.bowling
+        : prev.bowling;
+
+      const updatedScorecard = {
+        ...prev,
+        batting: mergedBatting,
+        bowling: mergedBowling,
+        inning: { ...prev.inning, ...scorecardDelta },
+      };
+
+      // Trigger re-transform with the newly merged scorecard
+      // Use setTimeout(0) to avoid calling setState during another setState
+      setTimeout(() => transformScorecardToState(updatedScorecard, initialLiveStatus), 0);
+
+      return updatedScorecard;
+    });
+  }, [scorecardDelta, currentInning, transformScorecardToState, initialLiveStatus]);
+
+
+  // Load live status and scorecard
+  useEffect(() => {
+    if (matchId) {
+      loadLiveData();
+      loadOverHistory();
+      loadSquads();
+      loadAllInnings();
+
+      // Sync tossInfo from matchData if available
+      if (matchData?.toss) {
+        const info = typeof matchData.toss === 'object'
+          ? (matchData as any).toss?.tossText
+          : matchData.toss;
+        setTossInfo(info || 'Toss Pending');
+      }
+      // ... (rest of the effect)
+    }
+  }, [matchId, currentInning, loadLiveData, loadOverHistory, loadSquads, matchData]);
+
+
 
   const handleTeamClick = (team: string, teamId: string) => {
     if (team !== currentBattingTeam) {
@@ -1079,22 +1227,12 @@ export function LiveMatchLiveTab({
     }
   };
 
-  // Setup Auto Refresh
+  // Setup Auto Refresh - POLL REMOVED - Using Sockets for instant updates
   useEffect(() => {
-    let intervalId: any;
-
-    if (autoRefresh && matchId) {
-      intervalId = setInterval(() => {
-        loadLiveData(true);
-        loadOverHistory();
-        loadSessions(); // Also refresh sessions
-      }, 5000); // 5 seconds interval
-    }
-
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [autoRefresh, matchId, loadLiveData, loadOverHistory, loadSessions]);
+    // Background polling removed as requested to eliminate lag and redundant API calls.
+    // The UI now relies on socket-io events (scoreUpdate, scorecard_delta) which 
+    // provide instant, reactive updates without re-fetching from the database.
+  }, [matchId]);
 
   // Initial load of sessions
   useEffect(() => {
@@ -1698,7 +1836,6 @@ export function LiveMatchLiveTab({
 
         setBallEventInput("");
         toast.success("Wicket recorded. Edit details in table if needed.");
-        loadLiveData(true);
 
         setTimeout(() => {
           currentBallInputRef.current?.focus();
@@ -1714,14 +1851,12 @@ export function LiveMatchLiveTab({
         if (response.result.overs) setOvers(response.result.overs);
 
         toast.success("Ball updated");
-        loadLiveData(true);
       }
       else {
         toast.success('Event processed successfully');
         // Set current ball for immediate visual confirmation
         setCurrentBall(ballEventInput === 'UNDO' ? 'confirming' : ballEventInput);
         setBallEventInput("");
-        await loadLiveData(true);
       }
 
       // Small timeout to ensure input is rendered and available after reload
@@ -1799,7 +1934,6 @@ export function LiveMatchLiveTab({
       setSaving(true);
       await LiveMatchService.submitWicketWithDismissalType(matchId, dismissalType);
       toast.success('Wicket recorded successfully');
-      await loadLiveData(true);
       setShowDismissalSelector(false);
       setWicketContext(null);
     } catch (error: any) {
@@ -3079,7 +3213,7 @@ export function LiveMatchLiveTab({
                                 onClick={async () => {
                                   try {
                                     setSaving(true);
-                                    await LiveMatchService.setBowler(matchId, parseInt(currentInning), bowler._playerId);
+                                    await LiveMatchService.setCurrentBowler(matchId, parseInt(currentInning), bowler._playerId);
                                     toast.success(`${bowler.name} set as active bowler`);
                                     await loadLiveData(true);
                                   } catch (error: any) {

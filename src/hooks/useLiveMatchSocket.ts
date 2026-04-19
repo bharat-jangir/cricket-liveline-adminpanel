@@ -1,44 +1,176 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5002'; // Point to Socket Service
+const BASE_API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || BASE_API_URL.replace(/\/api\/?$/, '');
 
-export function useLiveMatchSocket(matchId: string, onUpdate: () => void) {
+// ─── Payload types ───────────────────────────────────────────────────────────
+
+export interface TeamLiveScore {
+  teamId: string;
+  name: string;
+  code: string;
+  score: string;
+  overs: string;
+}
+
+export interface MatchUpdatePayload {
+  matchId: string;
+  type: 'BALL' | 'WICKET' | 'OVER_END' | 'MATCH_RESET';
+  timestamp: string;
+  // Unified root-level fields
+  score?: string;
+  overs?: string;
+  runRate?: number;
+  currentInning?: number;
+  currentBall?: string;
+  recentBalls?: any[];
+  currentStrikerId?: string;
+  currentNonStrikerId?: string;
+  currentBowlerId?: string;
+  inning: {
+    number: number;
+    totalRuns: number;
+    totalBalls: number;
+    wickets: number;
+    overs: number;
+    runRate: number;
+    extras: number;
+  };
+  striker?: {
+    playerId: string;
+    name: string;
+    runs: number;
+    balls: number;
+    fours: number;
+    sixes: number;
+    strikeRate: number;
+  };
+  nonStriker?: {
+    playerId: string;
+    name: string;
+    runs: number;
+    balls: number;
+  };
+  bowler?: {
+    playerId: string;
+    name: string;
+    overs: number;
+    runs: number;
+    wickets: number;
+    economy: number;
+  };
+  lastBall?: {
+    runs: number;
+    extras: number;
+    isWicket: boolean;
+    ballType: string;
+    ballLabel: string;
+  };
+  teamA: TeamLiveScore;
+  teamB: TeamLiveScore;
+}
+
+export interface ScorecardDeltaPayload {
+  matchId: string;
+  inningNumber: number;
+  batting: {
+    playerId: string;
+    name: string;
+    runs: number;
+    balls: number;
+    fours: number;
+    sixes: number;
+    strikeRate: number;
+    isOut: boolean;
+    dismissalText?: string;
+    isOnStrike: boolean;
+  }[];
+  bowling: {
+    playerId: string;
+    name: string;
+    overs: number;
+    runs: number;
+    wickets: number;
+    economy: number;
+    isCurrent: boolean;
+  }[];
+  extras: {
+    wides: number;
+    noBalls: number;
+    byes: number;
+    legByes: number;
+    penalties: number;
+    total: number;
+  };
+  totalRuns: number;
+  wickets: number;
+  timestamp: string;
+}
+
+// ─── Hook ────────────────────────────────────────────────────────────────────
+
+interface UseLiveMatchSocketOptions {
+  /** Called on every ball/wicket/over-end event */
+  onUpdate?: () => void;
+}
+
+interface UseLiveMatchSocketReturn {
+  isConnected: boolean;
+  /** Last full match update — use for header score display */
+  lastUpdate: MatchUpdatePayload | null;
+  /** Last scorecard delta — use for table rows */
+  lastScorecardDelta: ScorecardDeltaPayload | null;
+}
+
+export function useLiveMatchSocket(
+  matchId: string,
+  onUpdate?: (() => void) | UseLiveMatchSocketOptions,
+): UseLiveMatchSocketReturn {
   const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<MatchUpdatePayload | null>(null);
+  const [lastScorecardDelta, setLastScorecardDelta] = useState<ScorecardDeltaPayload | null>(null);
+
+  // Support both legacy (function) and new object option styles
+  const legacyOnUpdate = typeof onUpdate === 'function' ? onUpdate : onUpdate?.onUpdate;
 
   useEffect(() => {
     if (!matchId) return;
 
-    // Connect to the /live namespace matching the backend MatchGateway
-    socketRef.current = io(`${SOCKET_URL}/live`, {
+    const socket = io(`${SOCKET_URL}/live`, {
       withCredentials: true,
-      transports: ['websocket', 'polling'], // Fallback to polling if websocket fails
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 2000,
     });
 
-    const socket = socketRef.current;
+    socketRef.current = socket;
 
     socket.on('connect', () => {
-      console.log('Socket connected:', socket.id);
+      console.log('[AdminSocket] Connected:', socket.id);
       setIsConnected(true);
-      // Join the match room
       socket.emit('join_match', { matchId });
     });
 
     socket.on('disconnect', () => {
-      console.log('Socket disconnected');
+      console.log('[AdminSocket] Disconnected');
       setIsConnected(false);
     });
 
-    // Listen for events to trigger refetch
-    socket.on('match_update', (data) => {
-      console.log('Received match_update via socket:', data);
-      onUpdate();
+    socket.on('match_joined', (data: any) => {
+      console.log('[AdminSocket] Joined room:', data);
     });
 
-    socket.on('match_reset', (data) => {
-      console.log('Received match_reset via socket:', data);
-      onUpdate();
+    socket.on('scoreUpdate', (data: MatchUpdatePayload) => {
+      console.log('[AdminSocket] scoreUpdate type:', data.type);
+      setLastUpdate(data);
+      legacyOnUpdate?.();
+    });
+
+    socket.on('scorecard_delta', (data: ScorecardDeltaPayload) => {
+      console.log('[AdminSocket] scorecard_delta inn=', data.inningNumber);
+      setLastScorecardDelta(data);
     });
 
     return () => {
@@ -47,7 +179,7 @@ export function useLiveMatchSocket(matchId: string, onUpdate: () => void) {
         socket.disconnect();
       }
     };
-  }, [matchId, onUpdate]);
+  }, [matchId]);
 
-  return { socket: socketRef.current, isConnected };
+  return { isConnected, lastUpdate, lastScorecardDelta };
 }

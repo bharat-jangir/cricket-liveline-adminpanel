@@ -61,16 +61,27 @@ export function LiveMatchView() {
   const [liveStatus, setLiveStatus] = useState<any>(null);
 
   // Use the local socket hook to keep live status updated automatically
-  const { isConnected } = useLiveMatchSocket(id || "", () => {
-    // When a match_update or match_reset event occurs, just refetch
-    loadLiveStatus();
-  });
+  const { isConnected, lastUpdate, lastScorecardDelta } = useLiveMatchSocket(id || "");
+
+  // Synchronize socket updates with local liveStatus state for instant UI updates
+  useEffect(() => {
+    if (lastUpdate) {
+      console.log('[LiveMatchView] Applying socket update:', lastUpdate.type);
+      setLiveStatus((prev: any) => ({
+        ...prev,
+        ...lastUpdate,
+        // Ensure consistency between different naming conventions if needed
+        score: lastUpdate.score || `${lastUpdate.inning.totalRuns}/${lastUpdate.inning.wickets}`,
+        overs: lastUpdate.overs || lastUpdate.inning.overs.toString(),
+      }));
+    }
+  }, [lastUpdate]);
 
   // Fetch match data
   useEffect(() => {
     if (id) {
       loadMatchData();
-      loadLiveStatus();
+      // loadLiveStatus removed here as LiveMatchLiveTab child handles it
     }
   }, [id]);
 
@@ -873,6 +884,7 @@ export function LiveMatchView() {
                 matchData={transformedMatchData}
                 matchFormat={matchData?.matchFormat}
                 liveStatus={liveStatus}
+                scorecardDelta={lastScorecardDelta}
                 ballsPerOver={transformedMatchData.ballsPerOver}
                 oversPerInning={transformedMatchData.oversPerInning}
                 onMatchRefresh={() => {
