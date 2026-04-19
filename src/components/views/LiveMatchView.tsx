@@ -81,7 +81,7 @@ export function LiveMatchView() {
   useEffect(() => {
     if (id) {
       loadMatchData();
-      // loadLiveStatus removed here as LiveMatchLiveTab child handles it
+      loadLiveStatus();
     }
   }, [id]);
 

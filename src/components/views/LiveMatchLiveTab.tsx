@@ -1,5 +1,7 @@
 import { MoreVertical, Pencil, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getPlayerIdString } from "../../utils/idUtils";
+import type { ScorecardDeltaPayload, MatchUpdatePayload } from "../../hooks/useLiveMatchSocket";
 import { toast } from "sonner";
 import { useSimpleKeyboardScore } from "../../hooks/useSimpleKeyboardScore";
 import { LiveMatchService, type Inning, type LiveMatchStatus, type Scorecard, type UpdateBatsmanDto, type UpdateBowlerDto, type UpdateTossDto } from "../../services/live-match.service";
@@ -88,8 +90,8 @@ interface LiveMatchLiveTabProps {
     totalInnings?: number;
   };
   matchFormat?: 'test' | 'odi' | 't20' | 't20i' | 't10' | 'hundred';
-  liveStatus?: any;
-  scorecardDelta?: any;
+  liveStatus?: MatchUpdatePayload | null;
+  scorecardDelta?: ScorecardDeltaPayload | null;
   ballsPerOver?: number;
   oversPerInning?: number;
   onMatchRefresh?: () => void;
@@ -121,6 +123,13 @@ export function LiveMatchLiveTab({
 
   // API Data State
   const [liveStatus, setLiveStatus] = useState<LiveMatchStatus | null>(null);
+  const liveStatusRef = useRef<LiveMatchStatus | null>(null);
+
+  // Sync ref with state
+  useEffect(() => {
+    liveStatusRef.current = liveStatus;
+  }, [liveStatus]);
+
   const [allInnings, setAllInnings] = useState<Inning[]>([]);
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -728,7 +737,7 @@ export function LiveMatchLiveTab({
   }, [matchId, currentInning, loadLiveData]);
 
   const transformScorecardToState = useCallback((data: Scorecard, currentStatus?: any) => {
-    const statusToUse = currentStatus || liveStatus;
+    const statusToUse = currentStatus || liveStatusRef.current;
     // Support both formats: socket scoreUpdate (striker.playerId) and liveStatus (currentStrikerId)
     const rawStrikerId = statusToUse?.currentStrikerId || statusToUse?.striker?.playerId;
     const rawNonStrikerId = statusToUse?.currentNonStrikerId || statusToUse?.nonStriker?.playerId;
@@ -750,9 +759,10 @@ export function LiveMatchLiveTab({
     const processedBatsmanIds = new Set<string>();
 
     // 1. Transform active batting scorecard entries
-    const scorecardBatsmen: Batsman[] = battingData.map((entry: any, index: number) => {
-      const pId = typeof entry.playerId === 'object' ? entry.playerId._id : entry.playerId;
-      processedBatsmanIds.add(String(pId));
+    const scorecardBatsmen: Batsman[] = (battingData.map((entry: any, index: number) => {
+      const pId = getPlayerIdString(entry.playerId);
+      if (!pId) return null;
+      processedBatsmanIds.add(pId);
 
       const inScorecard = entry.isVisible !== undefined ? entry.isVisible : true;
       let status: 'batting' | 'out' | 'yetToBat' = 'yetToBat';
@@ -773,25 +783,47 @@ export function LiveMatchLiveTab({
       } else if (entry.name) {
         name = entry.name;
       } else {
-        const squadPlayer = battingSquad.find(p => String(p._id) === String(pId));
+        const squadPlayer = battingSquad.find(p => getPlayerIdString(p._id) === pId);
         if (squadPlayer) name = squadPlayer.name;
+      }
+
+      // Hybrid Real-time Stats: Prioritize data from socket liveStatus for active players
+      let runs = (entry.runs ?? 0) as number;
+      let balls = (entry.balls ?? 0) as number;
+      let fours = (entry.fours ?? 0) as number;
+      let sixes = (entry.sixes ?? 0) as number;
+      let strikeRate = (entry.strikeRate ?? 0) as number;
+
+      if (isStriker && statusToUse?.striker) {
+        runs = statusToUse.striker.runs ?? runs;
+        balls = statusToUse.striker.balls ?? balls;
+        fours = statusToUse.striker.fours ?? fours;
+        sixes = statusToUse.striker.sixes ?? sixes;
+        strikeRate = statusToUse.striker.strikeRate ?? strikeRate;
+      } else if (isNonStriker && statusToUse?.nonStriker) {
+        runs = statusToUse.nonStriker.runs ?? runs;
+        balls = statusToUse.nonStriker.balls ?? balls;
+        fours = statusToUse.nonStriker.fours ?? fours;
+        sixes = statusToUse.nonStriker.sixes ?? sixes;
+        strikeRate = statusToUse.nonStriker.strikeRate ?? strikeRate;
       }
 
       return {
         id: index + 1,
         name,
         dismissal: entry.dismissalText || undefined,
-        runs: entry.runs ?? 0,
-        balls: entry.balls ?? 0,
-        fours: entry.fours ?? 0,
-        sixes: entry.sixes ?? 0,
-        to: entry.to ?? '',
-        tr: entry.tr ?? 0,
+        runs,
+        balls,
+        fours,
+        sixes,
+        strikeRate,
+        to: entry.to || '',
+        tr: entry.tr || (entry.runs ?? 0),
         status,
         inScorecard,
         _playerId: String(pId),
       };
-    });
+    }).filter(Boolean) as Batsman[]);
 
     // 2. Add players from squad who haven't batted yet
     const yetToBatBatsmen: Batsman[] = battingSquad
@@ -816,12 +848,14 @@ export function LiveMatchLiveTab({
     const processedBowlerIds = new Set<string>();
 
     // 3. Transform active bowling scorecard entries
-    const scorecardBowlers: Bowler[] = bowlingData.map((entry: any, index: number) => {
-      const pId = typeof entry.playerId === 'object' ? entry.playerId._id : entry.playerId;
-      processedBowlerIds.add(String(pId));
+    const scorecardBowlers: Bowler[] = (bowlingData.map((entry: any, index: number) => {
+      const pId = getPlayerIdString(entry.playerId);
+      if (!pId) return null;
+      processedBowlerIds.add(pId);
 
       const inScorecard = entry.isVisible !== undefined ? entry.isVisible : true;
-      const isCurrentBowler = entry.isCurrentBowler === true || (currentBowlerId && String(pId) === String(currentBowlerId));
+      const isCurrentInPayload = entry.isCurrentBowler === true || entry.isCurrent === true;
+      const isCurrentBowler = isCurrentInPayload || (currentBowlerId && String(pId) === String(currentBowlerId));
 
       // Robust Name Resolution for Bowlers
       let name = 'Unknown';
@@ -830,26 +864,40 @@ export function LiveMatchLiveTab({
       } else if (entry.name) {
         name = entry.name;
       } else {
-        const squadPlayer = bowlingSquad.find(p => String(p._id) === String(pId));
+        const squadPlayer = bowlingSquad.find(p => getPlayerIdString(p._id) === pId);
         if (squadPlayer) name = squadPlayer.name;
+      }
+
+      // Hybrid Real-time Stats for Bowler
+      let overs = entry.overs !== undefined ? String(entry.overs) : '0.0';
+      let runs = entry.runs ?? 0;
+      let wickets = entry.wickets ?? 0;
+      let maidens = entry.maidens ?? 0;
+      let economy = entry.economy ?? 0;
+
+      if (isCurrentBowler && statusToUse?.bowler) {
+        overs = statusToUse.bowler.overs !== undefined ? String(statusToUse.bowler.overs) : overs;
+        runs = statusToUse.bowler.runs ?? runs;
+        wickets = statusToUse.bowler.wickets ?? wickets;
+        economy = statusToUse.bowler.economy ?? economy;
       }
 
       return {
         id: index + 1,
         name,
-        overs: entry.overs !== undefined ? String(entry.overs) : '0.0',
-        maidens: entry.maidens ?? 0,
-        runs: entry.runs ?? 0,
-        wickets: entry.wickets ?? 0,
+        overs,
+        maidens,
+        runs,
+        wickets,
         isSelected: !!isCurrentBowler,
         inScorecard,
         _playerId: String(pId),
       };
-    });
+    }).filter(Boolean) as Bowler[]);
 
     // 4. Add players from squad who haven't bowled yet
     const yetToBowlBowlers: Bowler[] = bowlingSquad
-      .filter(player => !processedBowlerIds.has(String(player._id)))
+      .filter(player => !processedBowlerIds.has(String(getPlayerIdString(player._id))))
       .map((player, index) => ({
         id: scorecardBowlers.length + index + 1,
         name: player.name,
@@ -859,10 +907,10 @@ export function LiveMatchLiveTab({
         wickets: 0,
         isSelected: false,
         inScorecard: false,
-        _playerId: String(player._id),
+        _playerId: String(getPlayerIdString(player._id)),
       }));
 
-    const transformedBowlers = [...scorecardBowlers, ...yetToBowlBowlers];
+    const transformedBowlers = [...scorecardBowlers.filter(Boolean) as Bowler[], ...yetToBowlBowlers];
 
     // Find last wicket
     if (data.inning?.lastWicket) {
@@ -875,7 +923,7 @@ export function LiveMatchLiveTab({
         sixes: data.inning.lastWicket.sixes,
         to: data.inning.lastWicket.to || '',
         tr: data.inning.lastWicket.tr || 0,
-        _playerId: String(data.inning.lastWicket.playerId)
+        _playerId: getPlayerIdString(data.inning.lastWicket.playerId) || ''
       });
     } else {
       // Fallback to logical calculation if DB doesn't have it yet
@@ -885,7 +933,7 @@ export function LiveMatchLiveTab({
 
       if (dismissedBatsmen.length > 0) {
         const last = dismissedBatsmen[0];
-        const player = battingSquad.find(p => String(p._id) === String(typeof last.playerId === 'object' ? last.playerId._id : last.playerId));
+        const player = battingSquad.find(p => getPlayerIdString(p._id) === getPlayerIdString(last.playerId));
 
         setLastWicket({
           name: player?.name || (typeof last.playerId === 'object' ? (last.playerId as any).name : 'Unknown'),
@@ -896,7 +944,7 @@ export function LiveMatchLiveTab({
           sixes: last.sixes || 0,
           to: last.to || '',
           tr: last.tr || 0,
-          _playerId: player?._id ? String(player._id) : (typeof last.playerId === 'object' ? String(last.playerId._id) : String(last.playerId))
+          _playerId: getPlayerIdString(player?._id || (typeof last.playerId === 'object' ? last.playerId._id : last.playerId)) || ''
         });
       } else {
         // Reset last wicket if no data found
@@ -916,7 +964,7 @@ export function LiveMatchLiveTab({
 
     setBatsmen(transformedBatsmen);
     setBowlers(transformedBowlers);
-  }, [battingSquad, bowlingSquad, liveStatus, getPlayerIdString]);
+  }, [battingSquad, bowlingSquad, getPlayerIdString]); // Removed liveStatus to break loops; reads from ref via statusToUse if needed
 
   // Re-transform scorecard when squads are loaded
   useEffect(() => {
@@ -952,12 +1000,13 @@ export function LiveMatchLiveTab({
       });
 
       if (initialLiveStatus.recentBalls && initialLiveStatus.overs) {
+        const recentBalls = initialLiveStatus.recentBalls;
         const currentOverNumber = Math.ceil(parseFloat(initialLiveStatus.overs));
         if (currentOverNumber > 0) {
           setOverHistory(prev => {
             const newHistory = [...prev];
             // Filter socket balls to only include those from the current over AND of type 'ball'
-            const currentOverBalls = initialLiveStatus.recentBalls
+            const currentOverBalls = recentBalls
               .filter((ball: any) => {
                 const bOver = typeof ball === 'object' ? ball.overNumber : null;
                 const isBall = typeof ball === 'object' ? ball.type === 'ball' : true;
@@ -988,7 +1037,7 @@ export function LiveMatchLiveTab({
         }
       }
     }
-  }, [initialLiveStatus, transformScorecardToState]);
+  }, [initialLiveStatus]); // Removed transformScorecardToState to break loop
 
   // Synchronize scorecard with scorecardDelta prop (fed by sockets in parent)
   useEffect(() => {
@@ -1011,35 +1060,70 @@ export function LiveMatchLiveTab({
     // IMPORTANT: do NOT include 'scorecard' in deps — use functional setter to read latest scorecard
     // without triggering a re-run of this effect every time scorecard changes.
     setScorecard(prev => {
-      if (!prev) return prev;
+      // Improved logic: skip merge if scorecard is for a different inning
+      if (!prev || prev.inning?.inningNumber !== scorecardDelta.inningNumber) {
+        return prev;
+      }
 
-      // Safe merge: only use delta arrays if they actually contain players
-      const mergedBatting = (scorecardDelta.batting && scorecardDelta.batting.length > 0)
-        ? scorecardDelta.batting
-        : prev.batting;
-      const mergedBowling = (scorecardDelta.bowling && scorecardDelta.bowling.length > 0)
-        ? scorecardDelta.bowling
-        : prev.bowling;
+      // Safe merge for batting: update existing players, keep others
+      const mergedBatting = [...prev.batting];
+      if (scorecardDelta.batting && scorecardDelta.batting.length > 0) {
+        scorecardDelta.batting.forEach((newB: any) => {
+          const idx = mergedBatting.findIndex(eb => getPlayerIdString(eb.playerId) === getPlayerIdString(newB.playerId));
+          if (idx !== -1) {
+            mergedBatting[idx] = { ...mergedBatting[idx], ...newB };
+          } else {
+            mergedBatting.push(newB as any);
+          }
+        });
+      }
 
-      const updatedScorecard = {
+      // Safe merge for bowling: update existing players, keep others
+      const mergedBowling = [...prev.bowling];
+      if (scorecardDelta.bowling && scorecardDelta.bowling.length > 0) {
+        scorecardDelta.bowling.forEach((newB: any) => {
+          const idx = mergedBowling.findIndex(eb => getPlayerIdString(eb.playerId) === getPlayerIdString(newB.playerId));
+          if (idx !== -1) {
+            mergedBowling[idx] = { ...mergedBowling[idx], ...newB };
+          } else {
+            mergedBowling.push(newB as any);
+          }
+        });
+      }
+
+      const updatedScorecard: Scorecard = {
         ...prev,
         batting: mergedBatting,
         bowling: mergedBowling,
-        inning: { ...prev.inning, ...scorecardDelta },
+        inning: { 
+          ...prev.inning, 
+          inningNumber: scorecardDelta.inningNumber,
+          totalRuns: scorecardDelta.totalRuns,
+          totalWickets: scorecardDelta.wickets,
+          extras: scorecardDelta.extras.total,
+          wides: scorecardDelta.extras.wides,
+          noBalls: scorecardDelta.extras.noBalls,
+          byes: scorecardDelta.extras.byes,
+          legByes: scorecardDelta.extras.legByes,
+          penalties: scorecardDelta.extras.penalties,
+        },
       };
 
       // Trigger re-transform with the newly merged scorecard
-      // Use setTimeout(0) to avoid calling setState during another setState
       setTimeout(() => transformScorecardToState(updatedScorecard, initialLiveStatus), 0);
-
+      
       return updatedScorecard;
     });
-  }, [scorecardDelta, currentInning, transformScorecardToState, initialLiveStatus]);
+  }, [scorecardDelta, currentInning, initialLiveStatus]);
 
 
   // Load live status and scorecard
   useEffect(() => {
-    if (matchId) {
+    if (matchId && currentInning) {
+      // Clear data to prevent stale display
+      setBatsmen([]);
+      setBowlers([]);
+      setScorecard(null);
       loadLiveData();
       loadOverHistory();
       loadSquads();
@@ -1054,7 +1138,7 @@ export function LiveMatchLiveTab({
       }
       // ... (rest of the effect)
     }
-  }, [matchId, currentInning, loadLiveData, loadOverHistory, loadSquads, matchData]);
+  }, [matchId, currentInning, loadLiveData, loadOverHistory, loadSquads, loadAllInnings, matchData]); // Added currentInning and all load methods to ensure reactivity
 
 
 
@@ -3125,7 +3209,7 @@ export function LiveMatchLiveTab({
                         {bowler.inScorecard ? (
                           <input
                             className="w-10 bg-white dark:bg-black/20 border border-slate-300 dark:border-slate-600 text-center focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded py-0.5"
-                            value={bowler.overs || ''}
+                            value={bowler.overs ?? ''}
                             onChange={(e) => handleBowlerStatInputChange(bowler.id, 'overs', e.target.value)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
@@ -3139,7 +3223,7 @@ export function LiveMatchLiveTab({
                         {bowler.inScorecard ? (
                           <input
                             className="w-10 bg-white dark:bg-black/20 border border-slate-300 dark:border-slate-600 text-center focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded py-0.5"
-                            value={bowler.maidens || ''}
+                            value={bowler.maidens ?? ''}
                             onChange={(e) => handleBowlerStatInputChange(bowler.id, 'maidens', e.target.value)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
@@ -3153,7 +3237,7 @@ export function LiveMatchLiveTab({
                         {bowler.inScorecard ? (
                           <input
                             className="w-10 bg-white dark:bg-black/20 border border-slate-300 dark:border-slate-600 text-center focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded py-0.5"
-                            value={bowler.runs || ''}
+                            value={bowler.runs ?? ''}
                             onChange={(e) => handleBowlerStatInputChange(bowler.id, 'runs', e.target.value)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
@@ -3167,7 +3251,7 @@ export function LiveMatchLiveTab({
                         {bowler.inScorecard ? (
                           <input
                             className="w-10 bg-white dark:bg-black/20 border border-slate-300 dark:border-slate-600 text-center focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded py-0.5"
-                            value={bowler.wickets || ''}
+                            value={bowler.wickets ?? ''}
                             onChange={(e) => handleBowlerStatInputChange(bowler.id, 'wickets', e.target.value)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
@@ -3387,7 +3471,7 @@ export function LiveMatchLiveTab({
                         {batsman.inScorecard ? (
                           <input
                             className="w-10 bg-white dark:bg-black/20 border border-slate-300 dark:border-slate-600 text-center focus:outline-none focus:ring-1 focus:ring-red-500 rounded py-0.5"
-                            value={batsman.runs || ''}
+                            value={batsman.runs ?? ''}
                             onChange={(e) => handleBatsmanStatInputChange(batsman.id, 'runs', e.target.value)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
@@ -3401,7 +3485,7 @@ export function LiveMatchLiveTab({
                         {batsman.inScorecard ? (
                           <input
                             className="w-10 bg-white dark:bg-black/20 border border-slate-300 dark:border-slate-600 text-center focus:outline-none focus:ring-1 focus:ring-red-500 rounded py-0.5"
-                            value={batsman.balls || ''}
+                            value={batsman.balls ?? ''}
                             onChange={(e) => handleBatsmanStatInputChange(batsman.id, 'balls', e.target.value)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
@@ -3415,7 +3499,7 @@ export function LiveMatchLiveTab({
                         {batsman.inScorecard ? (
                           <input
                             className="w-10 bg-white dark:bg-black/20 border border-slate-300 dark:border-slate-600 text-center focus:outline-none focus:ring-1 focus:ring-red-500 rounded py-0.5"
-                            value={batsman.fours || ''}
+                            value={batsman.fours ?? ''}
                             onChange={(e) => handleBatsmanStatInputChange(batsman.id, 'fours', e.target.value)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
@@ -3429,7 +3513,7 @@ export function LiveMatchLiveTab({
                         {batsman.inScorecard ? (
                           <input
                             className="w-10 bg-white dark:bg-black/20 border border-slate-300 dark:border-slate-600 text-center focus:outline-none focus:ring-1 focus:ring-red-500 rounded py-0.5"
-                            value={batsman.sixes || ''}
+                            value={batsman.sixes ?? ''}
                             onChange={(e) => handleBatsmanStatInputChange(batsman.id, 'sixes', e.target.value)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
@@ -3457,7 +3541,7 @@ export function LiveMatchLiveTab({
                         {batsman.inScorecard ? (
                           <input
                             className="w-10 bg-white dark:bg-black/20 border border-slate-300 dark:border-slate-600 text-center focus:outline-none focus:ring-1 focus:ring-red-500 rounded py-0.5"
-                            value={batsman.tr || ''}
+                            value={batsman.tr ?? ''}
                             onChange={(e) => handleBatsmanStatInputChange(batsman.id, 'tr', e.target.value)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {

@@ -18,6 +18,11 @@ export interface MatchUpdatePayload {
   matchId: string;
   type: 'BALL' | 'WICKET' | 'OVER_END' | 'MATCH_RESET';
   timestamp: string;
+  toss?: {
+    tossText: string;
+    winnerId: string;
+    elected: 'bat' | 'bowl';
+  };
   // Unified root-level fields
   score?: string;
   overs?: string;
@@ -90,9 +95,11 @@ export interface ScorecardDeltaPayload {
     playerId: string;
     name: string;
     overs: number;
+    maidens: number;
     runs: number;
     wickets: number;
     economy: number;
+    isCurrentBowler: boolean;
     isCurrent: boolean;
   }[];
   extras: {
