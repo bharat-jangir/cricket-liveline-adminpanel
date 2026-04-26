@@ -741,15 +741,21 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                                     </SelectTrigger>
                                     <SelectContent>
                                         {availableTeams
-                                            .filter(team => {
+                                            .filter((team, index, self) => {
                                                 const teamIdStr = typeof team.teamId === 'string' ? team.teamId : (team.teamId._id || '');
-                                                return !selectedTeamIds.includes(teamIdStr);
+                                                // Check if it's already in selected list
+                                                if (selectedTeamIds.includes(teamIdStr)) return false;
+                                                // Deduplicate by teamId
+                                                return self.findIndex(t => {
+                                                    const tId = typeof t.teamId === 'string' ? t.teamId : (t.teamId._id || '');
+                                                    return tId === teamIdStr;
+                                                }) === index;
                                             })
                                             .map((team) => {
                                                 const teamIdStr = typeof team.teamId === 'string' ? team.teamId : (team.teamId._id || '');
                                                 return (
                                                     <SelectItem key={teamIdStr} value={teamIdStr}>
-                                                        {team.team?.name || team.team?.shortName || 'Unknown Team'}
+                                                        {(typeof team.teamId === 'object' ? (team.teamId as any).name : (team.team?.name || team.team?.shortName)) || 'Unknown Team'}
                                                     </SelectItem>
                                                 );
                                             })}
@@ -766,7 +772,7 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                                                 <Badge key={teamId} variant='secondary' className='cursor-pointer' onClick={() => {
                                                     setSelectedTeamIds(selectedTeamIds.filter(id => id !== teamId));
                                                 }}>
-                                                    {team?.team?.name || team?.team?.shortName || 'Unknown'} ×
+                                                    {(team && typeof team.teamId === 'object' ? (team.teamId as any).name : (team?.team?.name || team?.team?.shortName)) || 'Unknown'} ×
                                                 </Badge>
                                             );
                                         })}
@@ -859,13 +865,23 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                                     </SelectTrigger>
                                     <SelectContent>
                                         {availableTeams
-                                            .filter(team => {
+                                            .filter((team, index, self) => {
                                                 const teamId = typeof team.teamId === 'string'
                                                     ? team.teamId
                                                     : (typeof team.teamId === 'object' && team.teamId !== null
                                                         ? team.teamId._id?.toString() || team.teamId.toString()
                                                         : String(team.teamId));
-                                                return !multiSelectedTeamIds.includes(teamId);
+                                                // Check if it's already in selected list
+                                                if (multiSelectedTeamIds.includes(teamId)) return false;
+                                                // Deduplicate by teamId
+                                                return self.findIndex(t => {
+                                                    const tId = typeof t.teamId === 'string'
+                                                        ? t.teamId
+                                                        : (typeof t.teamId === 'object' && t.teamId !== null
+                                                            ? t.teamId._id?.toString() || t.teamId.toString()
+                                                            : String(t.teamId));
+                                                    return tId === teamId;
+                                                }) === index;
                                             })
                                             .map((team) => {
                                                 const teamId = typeof team.teamId === 'string'
@@ -875,7 +891,7 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                                                         : String(team.teamId));
                                                 return (
                                                     <SelectItem key={teamId} value={teamId}>
-                                                        {team.team?.name || team.team?.shortName || 'Unknown Team'}
+                                                        {(typeof team.teamId === 'object' ? (team.teamId as any).name : (team.team?.name || team.team?.shortName)) || 'Unknown Team'}
                                                     </SelectItem>
                                                 );
                                             })}
@@ -892,7 +908,7 @@ export default function SeriesPointsTab({ seriesName = '' }: SeriesPointsTabProp
                                                 <Badge key={teamId} variant='secondary' className='cursor-pointer' onClick={() => {
                                                     setMultiSelectedTeamIds(multiSelectedTeamIds.filter(id => id !== teamId));
                                                 }}>
-                                                    {team?.team?.name || team?.team?.shortName || 'Unknown'} ×
+                                                    {(team && typeof team.teamId === 'object' ? (team.teamId as any).name : (team?.team?.name || team?.team?.shortName)) || 'Unknown'} ×
                                                 </Badge>
                                             );
                                         })}
