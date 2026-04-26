@@ -61,7 +61,7 @@ export function LiveMatchView() {
   const [liveStatus, setLiveStatus] = useState<any>(null);
 
   // Use the local socket hook to keep live status updated automatically
-  const { isConnected, lastUpdate, lastScorecardDelta } = useLiveMatchSocket(id || "");
+  const { isConnected, lastUpdate, lastScorecardDelta, lastPowerplayUpdate } = useLiveMatchSocket(id || "");
 
   // Synchronize socket updates with local liveStatus state for instant UI updates
   useEffect(() => {
@@ -76,6 +76,17 @@ export function LiveMatchView() {
       }));
     }
   }, [lastUpdate]);
+
+  useEffect(() => {
+    if (lastPowerplayUpdate) {
+      console.log('[LiveMatchView] Applying powerplay socket update:', lastPowerplayUpdate);
+      setLiveStatus((prev: any) => ({
+        ...prev,
+        ...lastPowerplayUpdate,
+        powerPlay: lastPowerplayUpdate.powerPlay !== undefined ? lastPowerplayUpdate.powerPlay : prev?.powerPlay
+      }));
+    }
+  }, [lastPowerplayUpdate]);
 
   // Fetch match data
   useEffect(() => {

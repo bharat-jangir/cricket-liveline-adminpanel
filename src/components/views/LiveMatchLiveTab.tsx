@@ -995,7 +995,7 @@ export function LiveMatchLiveTab({
       // Synchronize over history instantly using socket data (no API call)
       // Re-transform the current scorecard with updated striker/bowler IDs so highlights update
       setScorecard(prev => {
-        if (prev) setTimeout(() => transformScorecardToState(prev, initialLiveStatus), 0);
+        if (prev) setTimeout(() => transformScorecardToState(prev), 0);
         return prev;
       });
 
@@ -1110,7 +1110,7 @@ export function LiveMatchLiveTab({
       };
 
       // Trigger re-transform with the newly merged scorecard
-      setTimeout(() => transformScorecardToState(updatedScorecard, initialLiveStatus), 0);
+      setTimeout(() => transformScorecardToState(updatedScorecard), 0);
       
       return updatedScorecard;
     });
@@ -1430,22 +1430,61 @@ export function LiveMatchLiveTab({
     setEditOddsMode(false);
   };
 
-  const handleBowlerSelect = useCallback(async (bowlerId: number) => {
-    const bowler = bowlers.find(b => b.id === bowlerId);
+  const handleBowlerSelect = useCallback(async (playerId: string) => {
+    const bowler = bowlers.find(b => b._playerId === playerId);
     if (!bowler || !bowler.inScorecard) return;
 
     try {
       setSaving(true);
-      await LiveMatchService.setCurrentBowler(matchId, parseInt(currentInning), bowler._playerId);
+      
+      // Optimistic Updates
+      setBowlers(prev => prev.map(b => ({ ...b, isSelected: b._playerId === playerId })));
+      setLiveStatus(prev => prev ? ({ ...prev, currentBowlerId: playerId }) : null);
+
+      await LiveMatchService.setCurrentBowler(matchId, parseInt(currentInning), playerId);
       toast.success(`${bowler.name} set as current bowler`);
-      setBowlers(prev => prev.map(b => ({ ...b, isSelected: b.id === bowlerId })));
-      await loadLiveData(true);
+      
+      // We rely on optimistic update and socket for sync, 
+      // but a silent refresh ensures data consistency without jumping
+      setTimeout(() => loadLiveData(true), 1000); 
     } catch (error: any) {
       toast.error(error.message || 'Failed to set current bowler');
+      // Revert is complex, but loadLiveData will eventually fix it
+      loadLiveData(true);
     } finally {
       setSaving(false);
     }
   }, [bowlers, matchId, currentInning, loadLiveData]);
+
+  const handleBatsmanSelect = useCallback(async (playerId: string, type: 'striker' | 'non-striker') => {
+    const batsman = batsmen.find(b => b._playerId === playerId);
+    if (!batsman || !batsman.inScorecard) return;
+
+    try {
+      setSaving(true);
+      
+      // Optimistic Update LiveStatus (this handles checkmarks and header)
+      setLiveStatus(prev => {
+        if (!prev) return null;
+        if (type === 'striker') return { ...prev, currentStrikerId: playerId };
+        return { ...prev, currentNonStrikerId: playerId };
+      });
+
+      if (type === 'striker') {
+        await LiveMatchService.setStriker(matchId, parseInt(currentInning), playerId);
+      } else {
+        await LiveMatchService.setNonStriker(matchId, parseInt(currentInning), playerId);
+      }
+      
+      toast.success(`${batsman.name} set as ${type}`);
+      setTimeout(() => loadLiveData(true), 1000);
+    } catch (error: any) {
+      toast.error(error.message || `Failed to set ${type}`);
+      loadLiveData(true);
+    } finally {
+      setSaving(false);
+    }
+  }, [batsmen, matchId, currentInning, loadLiveData]);
 
   // Handle bowler stat input change (local state only) - memoized to prevent re-renders
   const handleBowlerStatInputChange = useCallback((id: number, field: keyof Bowler, value: string) => {
@@ -3189,7 +3228,7 @@ export function LiveMatchLiveTab({
                             type="radio"
                             name="selectedBowler"
                             checked={bowler.isSelected}
-                            onChange={() => handleBowlerSelect(bowler.id)}
+                            onChange={() => handleBowlerSelect(bowler._playerId)}
                             className="accent-blue-600 cursor-pointer"
                             disabled={!bowler.inScorecard || saving}
                           />
@@ -3294,19 +3333,8 @@ export function LiveMatchLiveTab({
                               )}
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
-                                onClick={async () => {
-                                  try {
-                                    setSaving(true);
-                                    await LiveMatchService.setCurrentBowler(matchId, parseInt(currentInning), bowler._playerId);
-                                    toast.success(`${bowler.name} set as active bowler`);
-                                    await loadLiveData(true);
-                                  } catch (error: any) {
-                                    toast.error(error.message || 'Failed to set bowler');
-                                  } finally {
-                                    setSaving(false);
-                                  }
-                                }}
-                                disabled={!bowler.inScorecard}
+                                onClick={() => handleBowlerSelect(bowler._playerId)}
+                                disabled={!bowler.inScorecard || saving}
                               >
                                 Set as Active Bowler
                               </DropdownMenuItem>
@@ -3405,19 +3433,7 @@ export function LiveMatchLiveTab({
                             type="radio"
                             name="activeBatsman"
                             checked={!!(liveStatus?.currentStrikerId && getPlayerIdString(liveStatus.currentStrikerId) === batsman._playerId)}
-                            onChange={async () => {
-                              if (!batsman.inScorecard || batsman.status === 'out' || saving) return;
-                              try {
-                                setSaving(true);
-                                await LiveMatchService.setStriker(matchId, parseInt(currentInning), batsman._playerId);
-                                toast.success(`${batsman.name} set as striker`);
-                                await loadLiveData(true);
-                              } catch (error: any) {
-                                toast.error(error.message || 'Failed to set striker');
-                              } finally {
-                                setSaving(false);
-                              }
-                            }}
+                            onChange={() => handleBatsmanSelect(batsman._playerId, 'striker')}
                             className="accent-green-600 cursor-pointer"
                             disabled={!batsman.inScorecard || batsman.status === 'out' || saving}
                           />
@@ -3585,36 +3601,14 @@ export function LiveMatchLiveTab({
                               <DropdownMenuSeparator />
                               <DropdownMenuLabel>Strike Position</DropdownMenuLabel>
                               <DropdownMenuItem
-                                onClick={async () => {
-                                  try {
-                                    setSaving(true);
-                                    await LiveMatchService.setStriker(matchId, parseInt(currentInning), batsman._playerId);
-                                    toast.success(`${batsman.name} set as striker`);
-                                    await loadLiveData(true);
-                                  } catch (error: any) {
-                                    toast.error(error.message || 'Failed to set striker');
-                                  } finally {
-                                    setSaving(false);
-                                  }
-                                }}
-                                disabled={!batsman.inScorecard || batsman.status === 'out'}
+                                onClick={() => handleBatsmanSelect(batsman._playerId, 'striker')}
+                                disabled={!batsman.inScorecard || batsman.status === 'out' || saving}
                               >
                                 Set as Striker (On Strike)
                               </DropdownMenuItem>
                               <DropdownMenuItem
-                                onClick={async () => {
-                                  try {
-                                    setSaving(true);
-                                    await LiveMatchService.setNonStriker(matchId, parseInt(currentInning), batsman._playerId);
-                                    toast.success(`${batsman.name} set as non-striker`);
-                                    await loadLiveData(true);
-                                  } catch (error: any) {
-                                    toast.error(error.message || 'Failed to set non-striker');
-                                  } finally {
-                                    setSaving(false);
-                                  }
-                                }}
-                                disabled={!batsman.inScorecard || batsman.status === 'out'}
+                                onClick={() => handleBatsmanSelect(batsman._playerId, 'non-striker')}
+                                disabled={!batsman.inScorecard || batsman.status === 'out' || saving}
                               >
                                 Set as Non-Striker
                               </DropdownMenuItem>

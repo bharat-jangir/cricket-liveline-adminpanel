@@ -30,6 +30,7 @@ export interface MatchUpdatePayload {
   currentInning?: number;
   currentBall?: string;
   recentBalls?: any[];
+  powerPlay?: boolean;
   currentStrikerId?: string;
   currentNonStrikerId?: string;
   currentBowlerId?: string;
@@ -115,6 +116,14 @@ export interface ScorecardDeltaPayload {
   timestamp: string;
 }
 
+export interface PowerplayUpdatePayload {
+  matchId: string;
+  powerplayOvers?: string;
+  powerPlay?: boolean;
+  onOC?: boolean;
+  timestamp: string;
+}
+
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 interface UseLiveMatchSocketOptions {
@@ -128,6 +137,8 @@ interface UseLiveMatchSocketReturn {
   lastUpdate: MatchUpdatePayload | null;
   /** Last scorecard delta — use for table rows */
   lastScorecardDelta: ScorecardDeltaPayload | null;
+  /** Last powerplay update */
+  lastPowerplayUpdate: PowerplayUpdatePayload | null;
 }
 
 export function useLiveMatchSocket(
@@ -138,6 +149,7 @@ export function useLiveMatchSocket(
   const [isConnected, setIsConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<MatchUpdatePayload | null>(null);
   const [lastScorecardDelta, setLastScorecardDelta] = useState<ScorecardDeltaPayload | null>(null);
+  const [lastPowerplayUpdate, setLastPowerplayUpdate] = useState<PowerplayUpdatePayload | null>(null);
 
   // Support both legacy (function) and new object option styles
   const legacyOnUpdate = typeof onUpdate === 'function' ? onUpdate : onUpdate?.onUpdate;
@@ -179,6 +191,11 @@ export function useLiveMatchSocket(
       console.log('[AdminSocket] scorecard_delta inn=', data.inningNumber);
       setLastScorecardDelta(data);
     });
+    
+    socket.on('powerplay_update', (data: PowerplayUpdatePayload) => {
+      console.log('[AdminSocket] powerplay_update:', data);
+      setLastPowerplayUpdate(data);
+    });
 
     return () => {
       if (socket.connected) {
@@ -188,5 +205,5 @@ export function useLiveMatchSocket(
     };
   }, [matchId]);
 
-  return { isConnected, lastUpdate, lastScorecardDelta };
+  return { isConnected, lastUpdate, lastScorecardDelta, lastPowerplayUpdate };
 }
