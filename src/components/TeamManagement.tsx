@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Team } from '../App';
+import { Team } from '../types/team';
+import { Player } from '../types/player';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
@@ -8,28 +9,39 @@ import { Label } from './ui/label';
 import { Badge } from './ui/badge';
 import { Plus, Trash2, Edit, Users } from 'lucide-react';
 
+interface TeamWithPlayers extends Team {
+  players: Player[];
+}
+
 interface TeamManagementProps {
-  teams: Team[];
-  onAddTeam: (team: Team) => void;
-  onUpdateTeam: (team: Team) => void;
+  teams: TeamWithPlayers[];
+  onAddTeam: (team: TeamWithPlayers) => void;
+  onUpdateTeam: (team: TeamWithPlayers) => void;
   onDeleteTeam: (id: string) => void;
 }
 
 export function TeamManagement({ teams, onAddTeam, onUpdateTeam, onDeleteTeam }: TeamManagementProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingTeam, setEditingTeam] = useState<Team | null>(null);
+  const [editingTeam, setEditingTeam] = useState<TeamWithPlayers | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     shortName: '',
+    code: '',
+    country: '',
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const teamData: Team = {
-      id: editingTeam?.id || `t${Date.now()}`,
+    const teamData: TeamWithPlayers = {
+      ...editingTeam,
+      _id: editingTeam?._id || `t${Date.now()}`,
       name: formData.name,
       shortName: formData.shortName,
+      code: formData.code,
+      country: formData.country || 'International',
+      type: editingTeam?.type || 'international',
+      isActive: editingTeam?.isActive !== undefined ? editingTeam.isActive : true,
       players: editingTeam?.players || [],
     };
 
@@ -47,15 +59,19 @@ export function TeamManagement({ teams, onAddTeam, onUpdateTeam, onDeleteTeam }:
     setFormData({
       name: '',
       shortName: '',
+      code: '',
+      country: '',
     });
     setEditingTeam(null);
   };
 
-  const handleEdit = (team: Team) => {
+  const handleEdit = (team: TeamWithPlayers) => {
     setEditingTeam(team);
     setFormData({
       name: team.name,
       shortName: team.shortName,
+      code: team.code,
+      country: team.country,
     });
     setIsDialogOpen(true);
   };
@@ -91,20 +107,43 @@ export function TeamManagement({ teams, onAddTeam, onUpdateTeam, onDeleteTeam }:
                   />
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="shortName">Short Name</Label>
+                    <Input
+                      id="shortName"
+                      value={formData.shortName}
+                      onChange={(e) => setFormData({ ...formData, shortName: e.target.value.toUpperCase() })}
+                      placeholder="e.g., MI, CSK"
+                      maxLength={5}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="code">F-Key / Code</Label>
+                    <Input
+                      id="code"
+                      value={formData.code}
+                      onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                      placeholder="Unique Code"
+                      required
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="shortName">Short Name</Label>
+                  <Label htmlFor="country">Country</Label>
                   <Input
-                    id="shortName"
-                    value={formData.shortName}
-                    onChange={(e) => setFormData({ ...formData, shortName: e.target.value.toUpperCase() })}
-                    placeholder="e.g., MI, CSK"
-                    maxLength={3}
+                    id="country"
+                    value={formData.country}
+                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                    placeholder="Team country"
                     required
                   />
                 </div>
 
-                <div className="flex gap-2">
-                  <Button type="submit" className="flex-1">
+                <div className="flex gap-2 pt-4">
+                  <Button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700">
                     {editingTeam ? 'Update Team' : 'Create Team'}
                   </Button>
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
@@ -122,36 +161,39 @@ export function TeamManagement({ teams, onAddTeam, onUpdateTeam, onDeleteTeam }:
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {teams.map(team => (
-              <div key={team.id} className="rounded-lg border p-4 hover:shadow-md transition-shadow">
+              <div key={team._id} className="rounded-lg border p-4 hover:shadow-md transition-shadow bg-card">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3>{team.name}</h3>
+                      <h3 className="font-bold">{team.name}</h3>
                       <Badge variant="secondary">{team.shortName}</Badge>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Users className="size-3" />
-                      <span>{team.players.length} players</span>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Users className="size-3" />
+                        <span>{team.players?.length || 0} players</span>
+                      </div>
+                      <div className="text-[10px] text-muted-foreground font-mono">Code: {team.code}</div>
                     </div>
                   </div>
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => handleEdit(team)}>
+                    <Button variant="ghost" size="sm" onClick={() => handleEdit(team)} className="size-8 p-0">
                       <Edit className="size-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => onDeleteTeam(team.id)}>
-                      <Trash2 className="size-4 text-destructive" />
+                    <Button variant="ghost" size="sm" onClick={() => team._id && onDeleteTeam(team._id)} className="size-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10">
+                      <Trash2 className="size-4" />
                     </Button>
                   </div>
                 </div>
-                {team.players.length > 0 && (
+                {team.players && team.players.length > 0 && (
                   <div className="pt-3 border-t">
-                    <p className="text-xs text-muted-foreground mb-2">Players:</p>
+                    <p className="text-xs text-muted-foreground mb-2">Recent Players:</p>
                     <div className="space-y-1">
                       {team.players.slice(0, 3).map(player => (
-                        <p key={player.id} className="text-sm">{player.name}</p>
+                        <p key={player._id} className="text-sm truncate">{player.name}</p>
                       ))}
                       {team.players.length > 3 && (
-                        <p className="text-xs text-muted-foreground">+{team.players.length - 3} more</p>
+                        <p className="text-xs text-muted-foreground italic">+{team.players.length - 3} more...</p>
                       )}
                     </div>
                   </div>
