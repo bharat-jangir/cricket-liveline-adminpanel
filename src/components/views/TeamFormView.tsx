@@ -957,20 +957,21 @@ export function TeamFormView() {
                         label=""
                       />
                       {!jerseyLimitedPreview && (
-                        <div className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-600 rounded-lg bg-slate-900/50">
-                          <div className="w-32 flex flex-col items-center">
-                            {/* Player Head */}
+                        <div className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-600 rounded-lg bg-slate-900/50 h-64">
+                          <div className="relative w-48 h-48 flex items-center justify-center">
+                            {/* Player Head on top */}
                             <img
                               src="/src/assets/player/1BJ.webp"
                               alt="Player"
-                              className="w-32 h-32 -mb-[35px] object-cover rounded-full"
+                              className="absolute top-3 w-28 h-28 object-cover rounded-full  shadow-xl z-1000"
                             />
-                            {/* Jersey/T-shirt */}
+                            {/* Jersey/T-shirt as base */}
                             <img
                               src="/src/assets/player/limited-jersey.png"
                               alt="Limited Jersey"
-                              className="w-28 h-28 object-contain -mt-3"
+                              className="w-30 h-40 object-contain mt-12"
                             />
+
                           </div>
                           <p className="text-sm text-slate-400 mt-2">Demo Jersey Preview</p>
                         </div>
@@ -987,19 +988,18 @@ export function TeamFormView() {
                         label=""
                       />
                       {!jerseyTestPreview && (
-                        <div className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-600 rounded-lg bg-slate-900/50">
-                          <div className="w-32 flex flex-col items-center">
-                            {/* Player Head */}
+                        <div className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-600 rounded-lg bg-slate-900/50 h-64">
+                          <div className="relative w-48 h-48 flex items-center justify-center">
                             <img
                               src="/src/assets/player/1BJ.webp"
                               alt="Player"
-                              className="w-32 h-32 -mb-[35px] object-cover rounded-full"
+                              className="absolute top-3 w-28 h-28 object-cover rounded-full  shadow-xl z-1000"
                             />
-                            {/* Jersey/T-shirt */}
+                            {/* Jersey/T-shirt as base */}
                             <img
                               src="/src/assets/player/test-jersey.png"
                               alt="Test Jersey"
-                              className="w-28 h-28 object-contain -mt-3"
+                              className="w-30 h-40 object-contain mt-12"
                             />
                           </div>
                           <p className="text-sm text-slate-400 mt-2">Demo Jersey Preview</p>

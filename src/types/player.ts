@@ -43,6 +43,20 @@ export interface Player {
     twitter?: string;
     instagram?: string;
   };
+  careerStats?: {
+    batting?: Record<string, {
+      matches?: number; innings?: number; notOuts?: number; runs?: number;
+      highestScore?: string; average?: number; ballsFaced?: number; strikeRate?: number;
+      hundreds?: number; twoHundreds?: number; fifties?: number; fours?: number;
+      sixes?: number; catches?: number; stumpings?: number; debut?: string; debutMatch?: string;
+    }>;
+    bowling?: Record<string, {
+      matches?: number; innings?: number; balls?: number; runs?: number;
+      wickets?: number; bbi?: string; bbm?: string; economy?: number;
+      average?: number; strikeRate?: number; fiveWickets?: number; tenWickets?: number;
+      twoWickets?: number; maidens?: number; debut?: string; debutMatch?: string;
+    }>;
+  };
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -91,6 +105,7 @@ export interface CreatePlayerDto {
     twitter?: string;
     instagram?: string;
   };
+  careerStats?: any;
 }
 
 export interface UpdatePlayerDto extends Partial<CreatePlayerDto> {}

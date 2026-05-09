@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
@@ -37,7 +37,7 @@ interface TransformedMatch {
     over?: string;
     logo?: string;
     commentary?: string;
-    scores?: { score: string; over?: string }[]; // Array of score objects
+    scores?: { score: string; over?: string; isSuperOver?: boolean }[]; // Array of score objects
   };
   team2: {
     id?: string;
@@ -46,7 +46,7 @@ interface TransformedMatch {
     over?: string;
     logo?: string;
     commentary?: string;
-    scores?: { score: string; over?: string }[]; // Array of score objects
+    scores?: { score: string; over?: string; isSuperOver?: boolean }[]; // Array of score objects
   };
   odds: {
     teamName: string;
@@ -148,20 +148,8 @@ export function MatchesView() {
 
         // Process innings if available for multi-inning display
         if (liveStatus.innings && Array.isArray(liveStatus.innings)) {
-          // Filter super overs logic:
-          // Keep only the innings from the latest super over (highest superOverNumber)
-          const superOverInnings = liveStatus.innings.filter((inn: any) => inn.type === 'super_over');
-          let maxSuperOverNumber = -1;
-          if (superOverInnings.length > 0) {
-            maxSuperOverNumber = Math.max(...superOverInnings.map((inn: any) => inn.superOverNumber || 0));
-          }
-
-          const validInnings = liveStatus.innings.filter((inn: any) => {
-            if (inn.type === 'super_over') {
-              return (inn.superOverNumber || 0) === maxSuperOverNumber;
-            }
-            return true; // Keep all regular innings
-          });
+          // Show ALL innings (regular + all super over rounds)
+          const validInnings = liveStatus.innings;
 
           // Now map scores to teams
           validInnings.forEach((inn: any) => {
@@ -186,14 +174,16 @@ export function MatchesView() {
             const currentBall = inn.totalBalls % ballsPerOver;
             overStr = `${currentOver}.${currentBall}`;
 
+            const isSuperOver = inn.type === 'super_over';
+
             if (battingTeamId === teamAId) {
-              team1Scores.push({ score: scoreStr, over: overStr });
+              team1Scores.push({ score: scoreStr, over: overStr, isSuperOver });
               // If this is the current active inning, capture the over
               if (inn.inningNumber === liveStatus.currentInning) {
                 team1Over = overStr;
               }
             } else if (battingTeamId === teamBId) {
-              team2Scores.push({ score: scoreStr, over: overStr });
+              team2Scores.push({ score: scoreStr, over: overStr, isSuperOver });
               if (inn.inningNumber === liveStatus.currentInning) {
                 team2Over = overStr;
               }
@@ -263,8 +253,20 @@ export function MatchesView() {
           back: match.oddsBlue || 0,
           lay: match.oddsRed || 0,
         },
-        fKeyInn: match.currentInning ? `Inn ${match.currentInning}` : '',
-        inn: match.currentInning ? `${match.currentInning}` : '',
+        fKeyInn: (() => {
+          const totalInn = (liveStatus?.innings?.length) || match.totalInnings || match.currentInning;
+          const currInn = match.currentInning;
+          if (currInn && totalInn) return `Inn ${currInn}`;
+          if (currInn) return `Inn ${currInn}`;
+          return '';
+        })(),
+        inn: (() => {
+          const totalInn = (liveStatus?.innings?.length) || match.totalInnings || match.currentInning;
+          const currInn = match.currentInning;
+          if (currInn && totalInn && totalInn !== currInn) return `${totalInn}`;
+          if (currInn) return `${currInn}`;
+          return '';
+        })(),
         comment: match.result?.resultText || match.comment2 || '',
         result: match.result?.resultText || ''
       };
@@ -417,6 +419,9 @@ export function MatchesView() {
                                         {m.team1.scores && m.team1.scores.length > 0 && m.team1.scores[0].score !== '–' ? (
                                           m.team1.scores.map((s, idx) => (
                                             <div key={idx} className="flex items-center gap-1">
+                                              {s.isSuperOver && (
+                                                <span style={{ backgroundColor: '#f97316', color: '#fff', fontSize: '9px', padding: '1px 4px', borderRadius: '3px', fontWeight: 700, letterSpacing: '0.03em' }}>SO</span>
+                                              )}
                                               <span className="font-medium">{s.score}</span>
                                               {s.over && s.over !== '' && <span className="text-xs text-slate-500">{s.over}</span>}
                                             </div>
@@ -438,6 +443,9 @@ export function MatchesView() {
                                             <div key={idx} className="flex items-center justify-end gap-1">
                                               {s.over && s.over !== '' && <span className="text-xs text-slate-500">{s.over}</span>}
                                               <span className="font-medium">{s.score}</span>
+                                              {s.isSuperOver && (
+                                                <span style={{ backgroundColor: '#f97316', color: '#fff', fontSize: '9px', padding: '1px 4px', borderRadius: '3px', fontWeight: 700, letterSpacing: '0.03em' }}>SO</span>
+                                              )}
                                             </div>
                                           ))
                                         ) : (
@@ -589,6 +597,9 @@ export function MatchesView() {
                                         {m.team1.scores && m.team1.scores.length > 0 && m.team1.scores[0].score !== '–' ? (
                                           m.team1.scores.map((s, idx) => (
                                             <div key={idx} className="flex items-center gap-1">
+                                              {s.isSuperOver && (
+                                                <span style={{ backgroundColor: '#f97316', color: '#fff', fontSize: '9px', padding: '1px 4px', borderRadius: '3px', fontWeight: 700, letterSpacing: '0.03em' }}>SO</span>
+                                              )}
                                               <span className="font-medium">{s.score}</span>
                                               {s.over && s.over !== '' && <span className="text-xs text-slate-500">{s.over}</span>}
                                             </div>
@@ -610,6 +621,9 @@ export function MatchesView() {
                                             <div key={idx} className="flex items-center justify-end gap-1">
                                               {s.over && s.over !== '' && <span className="text-xs text-slate-500">{s.over}</span>}
                                               <span className="font-medium">{s.score}</span>
+                                              {s.isSuperOver && (
+                                                <span style={{ backgroundColor: '#f97316', color: '#fff', fontSize: '9px', padding: '1px 4px', borderRadius: '3px', fontWeight: 700, letterSpacing: '0.03em' }}>SO</span>
+                                              )}
                                             </div>
                                           ))
                                         ) : (
