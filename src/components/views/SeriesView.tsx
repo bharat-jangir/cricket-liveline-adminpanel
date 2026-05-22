@@ -4,11 +4,11 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
-import { 
-  Plus, 
-  Search, 
-  Bell, 
-  CheckCircle2, 
+import {
+  Plus,
+  Search,
+  Bell,
+  CheckCircle2,
   Circle,
   Filter,
   Loader2
@@ -35,7 +35,7 @@ export function SeriesView() {
   const [activeTab, setActiveTab] = useState<'active' | 'all'>('active');
   const [loading, setLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-  
+
   // Filter states
   const [typeFilters, setTypeFilters] = useState({
     international: false,
@@ -73,7 +73,7 @@ export function SeriesView() {
   const loadSeries = useCallback(async () => {
     try {
       setLoading(true);
-      
+
       // Build query params
       const params: any = {
         page: pagination.page,
@@ -99,6 +99,15 @@ export function SeriesView() {
         params.year = parseInt(yearFilter);
       }
 
+      // Team filters
+      const teams: string[] = [];
+      if (team1Filter) teams.push(team1Filter);
+      if (team2Filter) teams.push(team2Filter);
+      if (team3Filter) teams.push(team3Filter);
+      if (teams.length > 0) {
+        params.team = teams.join(',');
+      }
+
       // Date filters
       if (startDateFilter) {
         params.startDateFrom = startDateFilter;
@@ -107,13 +116,18 @@ export function SeriesView() {
         params.endDateTo = endDateFilter;
       }
 
+      // League Type Filter
+      if (leagueTypeFilter) {
+        params.leagueType = leagueTypeFilter;
+      }
+
       // Active tab filter (status filter)
       if (activeTab === 'active') {
         params.status = 'running,upcoming,scheduled';
       }
 
       const response = await SeriesService.listSeries(params);
-      
+
       if (response.data?.result) {
         setAllSeries(response.data.result);
         if (response.data.pagination) {
@@ -130,7 +144,39 @@ export function SeriesView() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearchTerm, activeTab, typeFilters, yearFilter, startDateFilter, endDateFilter, pagination.page, pagination.limit]);
+  }, [
+    debouncedSearchTerm,
+    activeTab,
+    typeFilters,
+    yearFilter,
+    team1Filter,
+    team2Filter,
+    team3Filter,
+    startDateFilter,
+    endDateFilter,
+    leagueTypeFilter,
+    pagination.page,
+    pagination.limit
+  ]);
+
+  // Reset to page 1 when any filter changes
+  useEffect(() => {
+    setPagination(prev => {
+      if (prev.page === 1) return prev;
+      return { ...prev, page: 1 };
+    });
+  }, [
+    debouncedSearchTerm,
+    typeFilters,
+    yearFilter,
+    team1Filter,
+    team2Filter,
+    team3Filter,
+    startDateFilter,
+    endDateFilter,
+    leagueTypeFilter,
+    activeTab
+  ]);
 
   // Fetch series data
   useEffect(() => {
@@ -195,7 +241,7 @@ export function SeriesView() {
       {/* Series Name */}
       <TableCell>
         <div className="space-y-1">
-          <div 
+          <div
             className="font-medium hover:underline cursor-pointer text-blue-600 dark:text-blue-400"
           >
             {series.name}
@@ -212,7 +258,7 @@ export function SeriesView() {
       </TableCell>
 
       {/* Odds/Per */}
-      <TableCell 
+      <TableCell
         className="text-center"
         onClick={(e) => e.stopPropagation()} // Prevent row click
       >
@@ -282,7 +328,7 @@ export function SeriesView() {
       </TableCell>
 
       {/* Sq/Fix/Pt */}
-      <TableCell 
+      <TableCell
         className="text-center"
         onClick={(e) => e.stopPropagation()} // Prevent row click
       >
@@ -388,7 +434,7 @@ export function SeriesView() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-200">Cricketing Series</h1>
-        
+
         <div className="flex-1 max-w-md">
           <div className="relative">
             {isSearching ? (
@@ -405,8 +451,8 @@ export function SeriesView() {
           </div>
         </div>
 
-        <Button 
-          onClick={() => navigate('/series/new')} 
+        <Button
+          onClick={() => navigate('/series/new')}
           className="bg-blue-600 hover:bg-blue-700 text-white"
         >
           <Plus className="size-4 mr-2" />
@@ -432,7 +478,7 @@ export function SeriesView() {
                   <Checkbox
                     id="international"
                     checked={typeFilters.international}
-                    onCheckedChange={(checked) => {
+                    onCheckedChange={(checked: any) => {
                       setTypeFilters(prev => ({ ...prev, international: checked as boolean }));
                       setPagination(prev => ({ ...prev, page: 1 }));
                     }}
@@ -445,7 +491,7 @@ export function SeriesView() {
                   <Checkbox
                     id="domestic"
                     checked={typeFilters.domestic}
-                    onCheckedChange={(checked) => {
+                    onCheckedChange={(checked: any) => {
                       setTypeFilters(prev => ({ ...prev, domestic: checked as boolean }));
                       setPagination(prev => ({ ...prev, page: 1 }));
                     }}
@@ -458,7 +504,7 @@ export function SeriesView() {
                   <Checkbox
                     id="league"
                     checked={typeFilters.league}
-                    onCheckedChange={(checked) => {
+                    onCheckedChange={(checked: any) => {
                       setTypeFilters(prev => ({ ...prev, league: checked as boolean }));
                       setPagination(prev => ({ ...prev, page: 1 }));
                     }}
@@ -633,28 +679,28 @@ export function SeriesView() {
                   <>
                     {/* Recently Opened Section */}
                     {recentlyOpenedSeries.length > 0 && (
-                  <>
-                    <TableRow className="bg-slate-100 dark:bg-slate-900">
-                      <TableCell colSpan={7} className="font-semibold text-slate-700 dark:text-slate-300">
-                        Recently Opened
-                      </TableCell>
-                    </TableRow>
-                    {recentlyOpenedSeries.map(renderSeriesRow)}
-                  </>
-                )}
+                      <>
+                        <TableRow className="bg-slate-100 dark:bg-slate-900">
+                          <TableCell colSpan={7} className="font-semibold text-slate-700 dark:text-slate-300">
+                            Recently Opened
+                          </TableCell>
+                        </TableRow>
+                        {recentlyOpenedSeries.map(renderSeriesRow)}
+                      </>
+                    )}
 
-                {/* All/Active Series Section */}
-                {otherSeries.length > 0 && (
-                  <>
-                    <TableRow className="bg-slate-100 dark:bg-slate-900">
-                      <TableCell colSpan={7} className="font-semibold text-slate-700 dark:text-slate-300">
-                        {activeTab === 'active' ? 'Active Series' : 'All Series'}
-                      </TableCell>
-                    </TableRow>
-                    {otherSeries.map(renderSeriesRow)}
+                    {/* All/Active Series Section */}
+                    {otherSeries.length > 0 && (
+                      <>
+                        <TableRow className="bg-slate-100 dark:bg-slate-900">
+                          <TableCell colSpan={7} className="font-semibold text-slate-700 dark:text-slate-300">
+                            {activeTab === 'active' ? 'Active Series' : 'All Series'}
+                          </TableCell>
+                        </TableRow>
+                        {otherSeries.map(renderSeriesRow)}
+                      </>
+                    )}
                   </>
-                )}
-              </>
                 )}
               </TableBody>
             </Table>

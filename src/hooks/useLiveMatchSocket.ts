@@ -31,6 +31,7 @@ export interface MatchUpdatePayload {
   currentBall?: string;
   recentBalls?: any[];
   powerPlay?: boolean;
+  speech?: boolean;
   currentStrikerId?: string;
   currentNonStrikerId?: string;
   currentBowlerId?: string;
