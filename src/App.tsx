@@ -4,6 +4,7 @@ import { Toaster } from 'sonner';
 import { ThemeProvider } from './contexts/ThemeContext';
 import Sidebar from './components/Sidebar';
 import { TopBar } from './components/TopBar';
+import RankingsView from './components/views/RankingsView';
 import { MatchesView } from './components/views/MatchesView';
 import { TournamentsView } from './components/views/TournamentsView';
 import { VenuesView } from './components/views/VenuesView';
@@ -38,6 +39,7 @@ export default function App() {
     if (path.startsWith('/players')) return 'players';
     if (path.startsWith('/umpires')) return 'umpires';
     if (path.startsWith('/notifications')) return 'notifications';
+    if (path.startsWith('/rankings')) return 'rankings';
     return 'matches';
   };
 
@@ -75,6 +77,7 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<Navigate to="/matches" replace />} />
                 <Route path="/matches" element={<MatchesView />} />
+                <Route path="/rankings" element={<RankingsView />} />
                 <Route path="/tournaments" element={<TournamentsView />} />
                 <Route path="/venues" element={<VenuesView />} />
                 <Route path="/venues/add" element={<VenueFormView />} />

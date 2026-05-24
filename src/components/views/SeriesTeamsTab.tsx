@@ -211,12 +211,23 @@ export function SeriesTeamsTab() {
     }
   }, [showAddTeam, loadAvailableTeams]);
 
+  // Determine selected team - handle both populated and non-populated teamId
+  const getTeamId = (seriesTeam: SeriesTeam) => {
+    const teamId = seriesTeam.teamId as any;
+    return typeof teamId === 'string' ? teamId : teamId?._id;
+  };
+
+  const selectedTeamId = subId || (seriesTeams[0] ? getTeamId(seriesTeams[0]) : undefined);
+  const selectedSeriesTeam = seriesTeams.find(st => getTeamId(st) === selectedTeamId);
+  const selectedTeamData = selectedSeriesTeam ? (selectedSeriesTeam.teamId as any) : null;
+  const selectedTeam = typeof selectedTeamData === 'object' ? selectedTeamData : null;
+
   // Load squad when team is selected
   useEffect(() => {
-    if (subId && seriesTeams.length > 0) {
-      loadSquad(subId);
+    if (selectedTeamId && seriesTeams.length > 0) {
+      loadSquad(selectedTeamId);
     }
-  }, [subId, seriesTeams, loadSquad]);
+  }, [selectedTeamId, seriesTeams, loadSquad]);
 
   // Add team to series
   const handleAddTeam = async (team: Team) => {
@@ -341,16 +352,6 @@ export function SeriesTeamsTab() {
     setShowAddTeam(false);
   };
 
-  // Determine selected team - handle both populated and non-populated teamId
-  const getTeamId = (seriesTeam: SeriesTeam) => {
-    const teamId = seriesTeam.teamId as any;
-    return typeof teamId === 'string' ? teamId : teamId?._id;
-  };
-
-  const selectedTeamId = subId || (seriesTeams[0] ? getTeamId(seriesTeams[0]) : undefined);
-  const selectedSeriesTeam = seriesTeams.find(st => getTeamId(st) === selectedTeamId);
-  const selectedTeamData = selectedSeriesTeam ? (selectedSeriesTeam.teamId as any) : null;
-  const selectedTeam = typeof selectedTeamData === 'object' ? selectedTeamData : null;
 
   // Load available players for adding to squad
   const loadAvailablePlayers = useCallback(async (page: number = 1, append: boolean = false) => {

@@ -76,6 +76,16 @@ export const API_ENDPOINTS = {
     DELETE: (id: string) => `/admin/matches/${id}`,
   },
 
+  // Admin Rankings
+  RANKINGS: {
+    LIST: '/admin/rankings/findAll',
+    CREATE: '/admin/rankings/create',
+    PREVIEW: '/admin/rankings/preview',
+    REFRESH: '/admin/rankings/refresh',
+    UPDATE: (id: string) => `/admin/rankings/${id}`,
+    DELETE: (id: string) => `/admin/rankings/${id}`,
+  },
+
   // Add more endpoints as needed
 };
 
