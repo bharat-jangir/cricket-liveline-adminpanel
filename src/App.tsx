@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { useAuth } from './contexts/AuthContext';
+import { LoginView } from './components/views/LoginView';
 import Sidebar from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import RankingsView from './components/views/RankingsView';
@@ -26,6 +28,7 @@ import { LiveMatchView } from './components/views/LiveMatchView';
 export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const location = useLocation();
+  const { user, loading } = useAuth();
 
   // Helper to determine current view based on path
   const getCurrentView = () => {
@@ -47,6 +50,22 @@ export default function App() {
   const isFullScreenPage = location.pathname.startsWith('/match/');
 
   const currentView = getCurrentView();
+
+  if (loading) {
+    return (
+      <ThemeProvider>
+        <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950 text-slate-500">Loading…</div>
+      </ThemeProvider>
+    );
+  }
+
+  if (!user) {
+    return (
+      <ThemeProvider>
+        <LoginView />
+      </ThemeProvider>
+    );
+  }
 
   return (
     <ThemeProvider>

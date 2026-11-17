@@ -1,4 +1,5 @@
 import axios, { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import { getToken, AUTH_EXPIRED_EVENT } from './auth-token';
 
 // Create axios instance with base configuration
 const axiosInstance = axios.create({
@@ -13,13 +14,12 @@ const axiosInstance = axios.create({
 // Request interceptor
 axiosInstance.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    // You can add auth tokens here if needed
-    // const token = localStorage.getItem('token');
-    // if (token) {
-    //   config.headers.Authorization = `Bearer ${token}`;
-    // }
+    const token = getToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
 
-    console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`);
+    if (import.meta.env.DEV) console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`);
     
     return config;
   },
@@ -33,7 +33,7 @@ axiosInstance.interceptors.request.use(
 axiosInstance.interceptors.response.use(
   (response: AxiosResponse) => {
     // Log successful responses
-    console.log(`[API Response] ${response.config.method?.toUpperCase()} ${response.config.url}`, {
+    if (import.meta.env.DEV) console.log(`[API Response] ${response.config.method?.toUpperCase()} ${response.config.url}`, {
       status: response.status,
       logoId: response.data?.logoId,
     });
@@ -52,6 +52,11 @@ axiosInstance.interceptors.response.use(
       logoId: (error.response?.data as any)?.logoId,
       url: error.config?.url,
     });
+
+    // Expired / invalid token: let the app sign the user out (login attempts handle their own 401)
+    if (error.response?.status === 401 && !error.config?.url?.includes('/auth/login')) {
+      window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+    }
 
     // You can add global error handling here (e.g., show toast notification)
     // toast.error(errorMessage);

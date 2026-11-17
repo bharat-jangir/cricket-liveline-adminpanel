@@ -54,7 +54,8 @@
       outDir: 'build',
     },
     server: {
-      port: 3000,
+      port: 5173,
+      strictPort: true, // fail loudly instead of silently hopping onto another service's port (e.g. 3001)
       open: true,
     },
   });

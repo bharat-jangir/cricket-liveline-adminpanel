@@ -161,7 +161,8 @@ export function useSimpleKeyboardScore(options: UseSimpleKeyboardScoreOptions) {
     // Ignore if disabled
     if (!enabled) return;
 
-
+    // Holding a key down must never score multiple balls
+    if (event.repeat) return;
 
     // Ignore if focused on input elements for other keys
     const target = event.target as HTMLElement;
@@ -179,7 +180,8 @@ export function useSimpleKeyboardScore(options: UseSimpleKeyboardScoreOptions) {
 
     if (eventString) {
       event.preventDefault(); // Prevent default browser behavior
-      dispatchEvent(eventString);
+      // Errors are already surfaced via toast/onError; avoid unhandled rejections
+      dispatchEvent(eventString).catch(() => undefined);
     }
   }, [enabled, ignoreElements, mapKeyToEventString, dispatchEvent]);
 
