@@ -100,6 +100,7 @@ interface FixtureDisplay {
     matchTime?: string; // datetime-local format: YYYY-MM-DDTHH:mm
     status: MatchStatus;
     isFeatured: boolean; // Using isFeatured for isHomeDisplaying
+    f_key?: string;
 }
 
 export function SeriesFixtureTab() {
@@ -133,6 +134,7 @@ export function SeriesFixtureTab() {
         matchTime: '',
         status: 'Scheduled',
         isFeatured: false,
+        f_key: '',
     });
 
     // Load matches for the series
@@ -213,6 +215,7 @@ export function SeriesFixtureTab() {
                             matchTime: match.matchTime ? (typeof match.matchTime === 'string' ? new Date(match.matchTime).toISOString().slice(0, 16) : new Date(match.matchTime).toISOString().slice(0, 16)) : '',
                             status: mapStatusFromBackend(match.status),
                             isFeatured: match.isFeatured || false,
+                            f_key: match.f_key || '',
                         };
                     });
                     console.log('Display fixtures:', displayFixtures);
@@ -334,6 +337,7 @@ export function SeriesFixtureTab() {
                     matchTime: fixture.matchTime ? new Date(fixture.matchTime) : undefined,
                     status: mapStatusToBackend(fixture.status),
                     isFeatured: fixture.isFeatured,
+                    f_key: fixture.f_key || '',
                 };
 
                 return MatchService.updateMatch(fixture._id, payload);
@@ -367,6 +371,7 @@ export function SeriesFixtureTab() {
             matchTime: '',
             status: 'Scheduled',
             isFeatured: false,
+            f_key: '',
         });
     };
 
@@ -411,6 +416,7 @@ export function SeriesFixtureTab() {
                 matchTime: newFixture.matchTime ? new Date(newFixture.matchTime) : undefined,
                 status: mapStatusToBackend(newFixture.status as MatchStatus),
                 isFeatured: newFixture.isFeatured || false,
+                f_key: newFixture.f_key || '',
                 ballsPerOver: defaults.ballsPerOver,
                 oversPerInning: defaults.oversPerInning,
                 maxBowlerLimit: defaults.maxBowlerLimit,
@@ -667,6 +673,15 @@ export function SeriesFixtureTab() {
                                 </SelectContent>
                             </Select>
                         </div>
+                        <div>
+                            <label className='text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 block'>F Key</label>
+                            <Input
+                                value={newFixture.f_key || ''}
+                                onChange={(e) => setNewFixture({ ...newFixture, f_key: e.target.value })}
+                                placeholder="Enter F Key"
+                                className='bg-white dark:bg-slate-700'
+                            />
+                        </div>
                     </div>
                 </div>
             )}
@@ -816,6 +831,12 @@ export function SeriesFixtureTab() {
                                                     type="datetime-local"
                                                     value={fixture.matchTime || ''}
                                                     onChange={(e) => handleUpdateFixture(fixture._id!, 'matchTime', e.target.value)}
+                                                    className='h-8 bg-white dark:bg-slate-700'
+                                                />
+                                                <Input
+                                                    value={fixture.f_key || ''}
+                                                    onChange={(e) => handleUpdateFixture(fixture._id!, 'f_key', e.target.value)}
+                                                    placeholder="F Key"
                                                     className='h-8 bg-white dark:bg-slate-700'
                                                 />
                                             </div>

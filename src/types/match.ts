@@ -9,6 +9,7 @@ export interface Match {
   shortTitle: string;
   subtitle?: string;
   slug: string;
+  f_key?: string;
   tournamentId?: string;
   seriesId?: string | Series;
   series?: Series; // populated
@@ -68,6 +69,7 @@ export interface CreateMatchDto {
   shortTitle: string;
   subtitle?: string;
   slug: string;
+  f_key?: string;
   tournamentId?: string;
   seriesId?: string;
   matchType: 'international' | 'domestic' | 'league';

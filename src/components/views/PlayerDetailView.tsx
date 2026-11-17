@@ -37,6 +37,7 @@ export function PlayerDetailView() {
     const [shortName, setShortName] = useState('');
     const [nickName, setNickName] = useState('');
     const [iccName, setIccName] = useState('');
+    const [fKey, setFKey] = useState('');
 
     // Sync firstName + lastName with fullName
     const handleFirstNameChange = (value: string) => {
@@ -393,6 +394,7 @@ export function PlayerDetailView() {
                 setShortName(player.shortName ?? player.fullName ?? '');
                 setNickName(player.nickName ?? '');
                 setIccName(player.iccName ?? '');
+                setFKey(player.f_key ?? '');
                 setNationality(player.nationality ?? player.country ?? '');
                 setBirthPlace(player.birthPlace ?? '');
                 setHeight(player.height ?? '');
@@ -461,6 +463,7 @@ export function PlayerDetailView() {
                 shortName: shortName ? shortName.trim() : undefined,
                 nickName: nickName || undefined,
                 iccName: iccName || undefined,
+                f_key: fKey || '',
                 slug: PlayerService.generateSlug(fullName),
                 country: nationality.trim(),
                 nationality: nationality.trim(),
@@ -700,6 +703,14 @@ export function PlayerDetailView() {
                                             <div className="space-y-2">
                                                 <Label className="text-xs font-bold text-slate-500 uppercase">ICC Name</Label>
                                                 <Input value={iccName} onChange={(e) => setIccName(e.target.value)} placeholder="Enter ICC Name" />
+                                            </div>
+                                        </div>
+
+                                        {/* F Key Row */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-bold text-slate-500 uppercase">F Key</Label>
+                                                <Input value={fKey} onChange={(e) => setFKey(e.target.value)} placeholder="Enter F Key" />
                                             </div>
                                         </div>
 

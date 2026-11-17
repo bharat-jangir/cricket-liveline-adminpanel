@@ -6,6 +6,7 @@ export interface Player {
   nickName?: string;
   iccName?: string;
   slug: string;
+  f_key?: string;
   image?: string;
   coverImage?: string;
   dob?: Date;
@@ -68,6 +69,7 @@ export interface CreatePlayerDto {
   nickName?: string;
   iccName?: string;
   slug: string;
+  f_key?: string;
   image?: string;
   coverImage?: string;
   dob?: Date;

@@ -192,6 +192,7 @@ export function LiveMatchInfoTab({
   const [teamFormIndia, setTeamFormIndia] = useState("");
   const [headToHeadTeam1, setHeadToHeadTeam1] = useState("");
   const [headToHeadTeam2, setHeadToHeadTeam2] = useState("");
+  const [fKey, setFKey] = useState("");
 
   // Load match squads
   const loadSquads = useCallback(async () => {
@@ -412,6 +413,7 @@ export function LiveMatchInfoTab({
           if (data.oversPerInning) setOversPerInning(String(data.oversPerInning));
           if (data.maxBowlerLimit) setMaxBowlerLimit(String(data.maxBowlerLimit));
           if (data.matchFormat) setLocalMatchFormat(data.matchFormat.toLowerCase());
+          if (data.f_key) setFKey(data.f_key);
         }
         initialDetailsLoadDone.current = true;
       } catch (error) {
@@ -687,6 +689,7 @@ export function LiveMatchInfoTab({
         oversPerInning: parseInt(oversPerInning) || 20,
         maxBowlerLimit: parseInt(maxBowlerLimit) || 0,
         matchFormat: localMatchFormat,
+        f_key: fKey || '',
       };
 
       if (selectedVenueId) {
@@ -897,6 +900,16 @@ export function LiveMatchInfoTab({
                 value={matchData.time}
                 readOnly
                 className="bg-slate-50 dark:bg-slate-700"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                F Key
+              </Label>
+              <Input
+                placeholder="Enter F Key"
+                value={fKey}
+                onChange={(e) => setFKey(e.target.value)}
               />
             </div>
             <div className="space-y-2">

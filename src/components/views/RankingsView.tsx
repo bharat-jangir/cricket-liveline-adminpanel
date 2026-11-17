@@ -33,7 +33,7 @@ export default function RankingsView() {
   const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState('');
   const [totalPages, setTotalPages] = useState(1);
-  
+
   const [filters, setFilters] = useState({
     type: 'player',
     gender: 'men',
@@ -47,7 +47,7 @@ export default function RankingsView() {
         params: { page, limit, search, ...filters }
       });
       const responseData = res.data;
-      
+
       // The gateway wraps responses. The actual paginated object is often inside responseData.data.result
       if (responseData.data && responseData.data.result && Array.isArray(responseData.data.result.result)) {
         setRankings(responseData.data.result.result);
@@ -131,65 +131,65 @@ export default function RankingsView() {
 
   return (
     <div className="p-4 relative">
-      <div className="sticky top-0 z-10 bg-white dark:bg-gray-900 pb-2 mb-4 border-b border-gray-200 dark:border-gray-800 -mx-4 px-4 pt-4 -mt-4">
+      <div className="sticky -top-6 z-10 bg-white dark:bg-gray-900 pb-2 mb-4 border-b border-gray-200 dark:border-gray-800 -mx-4 px-4 pt-4 -mt-4">
         <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">Rankings</h1>
-        <div className="flex items-center space-x-2">
-          <input 
-            type="text" 
-            placeholder="Search by name or team..." 
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="border p-2 rounded dark:bg-gray-800 dark:border-gray-700"
-          />
+          <h1 className="text-2xl font-bold">Rankings</h1>
+          <div className="flex items-center space-x-2">
+            <input
+              type="text"
+              placeholder="Search by name or team..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="border p-2 rounded dark:bg-gray-800 dark:border-gray-700"
+            />
+          </div>
         </div>
-      </div>
 
-      <div className="flex flex-wrap items-center space-x-4 mb-4 bg-gray-50 p-4 rounded dark:bg-gray-800">
-        <select 
-          value={filters.type} 
-          onChange={e => setFilters(p => ({ ...p, type: e.target.value }))}
-          className="border p-2 rounded"
-        >
-          <option value="player">Player Rankings</option>
-          <option value="team">Team Rankings</option>
-        </select>
-
-        <select 
-          value={filters.gender} 
-          onChange={e => setFilters(p => ({ ...p, gender: e.target.value }))}
-          className="border p-2 rounded"
-        >
-          <option value="men">Men</option>
-          <option value="women">Women</option>
-        </select>
-
-        <select 
-          value={filters.format} 
-          onChange={e => setFilters(p => ({ ...p, format: e.target.value }))}
-          className="border p-2 rounded"
-        >
-          <option value="test">Test</option>
-          <option value="odi">ODI</option>
-          <option value="t20">T20</option>
-        </select>
-
-        {filters.type === 'player' && (
-          <select 
-            value={filters.role} 
-            onChange={e => setFilters(p => ({ ...p, role: e.target.value }))}
+        <div className="flex flex-wrap items-center space-x-4 mb-4 bg-gray-50 p-4 rounded dark:bg-gray-800">
+          <select
+            value={filters.type}
+            onChange={e => setFilters(p => ({ ...p, type: e.target.value }))}
             className="border p-2 rounded"
           >
-            <option value="batting">Batsman</option>
-            <option value="bowling">Bowler</option>
-            <option value="all-rounder">All-Rounder</option>
+            <option value="player">Player Rankings</option>
+            <option value="team">Team Rankings</option>
           </select>
-        )}
 
-        <button onClick={fetchPreview} className="px-4 py-2 bg-indigo-600 text-white rounded hover:scale-105 transition">
-          Fetch from Scraper
-        </button>
-      </div>
+          <select
+            value={filters.gender}
+            onChange={e => setFilters(p => ({ ...p, gender: e.target.value }))}
+            className="border p-2 rounded"
+          >
+            <option value="men">Men</option>
+            <option value="women">Women</option>
+          </select>
+
+          <select
+            value={filters.format}
+            onChange={e => setFilters(p => ({ ...p, format: e.target.value }))}
+            className="border p-2 rounded"
+          >
+            <option value="test">Test</option>
+            <option value="odi">ODI</option>
+            <option value="t20">T20</option>
+          </select>
+
+          {filters.type === 'player' && (
+            <select
+              value={filters.role}
+              onChange={e => setFilters(p => ({ ...p, role: e.target.value }))}
+              className="border p-2 rounded"
+            >
+              <option value="batting">Batsman</option>
+              <option value="bowling">Bowler</option>
+              <option value="all-rounder">All-Rounder</option>
+            </select>
+          )}
+
+          <button onClick={fetchPreview} className="px-4 py-2 bg-indigo-600 text-white rounded hover:scale-105 transition">
+            Fetch from Scraper
+          </button>
+        </div>
 
         {/* Form for adding/editing rankings */}
         <RankingForm onAdd={handleAdd} initialData={editingItem} onCancelEdit={() => setEditingItem(null)} />
@@ -242,15 +242,15 @@ export default function RankingsView() {
           Page {page} of {totalPages}
         </div>
         <div className="flex space-x-2">
-          <button 
-            disabled={page <= 1} 
+          <button
+            disabled={page <= 1}
             onClick={() => setPage(p => Math.max(1, p - 1))}
             className="px-3 py-1 border rounded disabled:opacity-50"
           >
             Previous
           </button>
-          <button 
-            disabled={page >= totalPages} 
+          <button
+            disabled={page >= totalPages}
             onClick={() => setPage(p => p + 1)}
             className="px-3 py-1 border rounded disabled:opacity-50"
           >

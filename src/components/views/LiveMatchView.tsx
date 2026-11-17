@@ -912,8 +912,10 @@ export function LiveMatchView() {
               />
             )}
 
-            {/* AP# Tab */}
-            {activeTab === "ap#" && <LiveMatchAPTab />}
+            {/* AP# Tab (Always mounted so interceptors run in the background) */}
+            <div className={activeTab === "ap#" ? "h-full block" : "hidden"}>
+              <LiveMatchAPTab />
+            </div>
 
             {/* Partnership Tab */}
             {activeTab === "partnership" && (
