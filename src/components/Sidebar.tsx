@@ -7,7 +7,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Settings,
-  BarChart2
+  BarChart2,
+  Newspaper,
+  Film
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useNavigate } from 'react-router-dom';
@@ -40,6 +42,8 @@ export default function Sidebar({ currentView, collapsed, setCollapsed }: Sideba
         { id: 'rankings', label: 'Rankings', icon: BarChart2, path: '/rankings', isImage: false },
         { id: 'umpires', label: 'Umpires', icon: UmpireIcon, path: '/umpires', isImage: true },
         { id: 'venues', label: 'Venues', icon: MapPin, path: '/venues', isImage: false },
+        { id: 'news', label: 'News', icon: Newspaper, path: '/news', isImage: false },
+        { id: 'shorts', label: 'Shorts', icon: Film, path: '/shorts', isImage: false },
         { id: 'notifications', label: 'Notification Center', icon: Bell, path: '/notifications', isImage: false },
       ]
     }

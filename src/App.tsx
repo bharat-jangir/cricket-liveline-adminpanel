@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { useAuth } from './contexts/AuthContext';
+import { LoginView } from './components/views/LoginView';
 import Sidebar from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import RankingsView from './components/views/RankingsView';
@@ -21,11 +23,14 @@ import { UmpiresView } from './components/views/UmpiresView';
 import { UmpireFormView } from './components/views/UmpireFormView';
 import NotificationsView from './components/views/NotificationsView';
 import NotificationDetailView from './components/views/NotificationDetailView';
+import { NewsView } from './components/views/NewsView';
+import { ShortsView } from './components/views/ShortsView';
 import { LiveMatchView } from './components/views/LiveMatchView';
 
 export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const location = useLocation();
+  const { user, loading } = useAuth();
 
   // Helper to determine current view based on path
   const getCurrentView = () => {
@@ -38,6 +43,8 @@ export default function App() {
     if (path.startsWith('/teams')) return 'teams';
     if (path.startsWith('/players')) return 'players';
     if (path.startsWith('/umpires')) return 'umpires';
+    if (path.startsWith('/news')) return 'news';
+    if (path.startsWith('/shorts')) return 'shorts';
     if (path.startsWith('/notifications')) return 'notifications';
     if (path.startsWith('/rankings')) return 'rankings';
     return 'matches';
@@ -47,6 +54,22 @@ export default function App() {
   const isFullScreenPage = location.pathname.startsWith('/match/');
 
   const currentView = getCurrentView();
+
+  if (loading) {
+    return (
+      <ThemeProvider>
+        <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950 text-slate-500">Loading…</div>
+      </ThemeProvider>
+    );
+  }
+
+  if (!user) {
+    return (
+      <ThemeProvider>
+        <LoginView />
+      </ThemeProvider>
+    );
+  }
 
   return (
     <ThemeProvider>
@@ -97,6 +120,8 @@ export default function App() {
                 <Route path="/umpires" element={<UmpiresView />} />
                 <Route path="/umpires/new" element={<UmpireFormView />} />
                 <Route path="/umpires/edit/:id" element={<UmpireFormView />} />
+                <Route path="/news" element={<NewsView />} />
+                <Route path="/shorts" element={<ShortsView />} />
                 <Route path="/notifications" element={<NotificationsView />} />
                 <Route path="/notifications/match/:matchId" element={<NotificationDetailView />} />
               </Routes>

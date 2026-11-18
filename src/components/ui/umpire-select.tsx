@@ -1,3 +1,4 @@
+import axiosInstance from '../../lib/axios';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronDown, Search, Loader2 } from 'lucide-react';
 import { Input } from '../ui/input';
@@ -29,10 +30,10 @@ export function UmpireSelect({ value, onChange, placeholder = "Select umpire" }:
   const fetchUmpires = useCallback(async (searchTerm: string, pageNum: number, reset = false) => {
     setLoading(true);
     try {
-      const response = await fetch(
-        `http://localhost:5001/umpires?search=${encodeURIComponent(searchTerm)}&page=${pageNum}&limit=20`
-      );
-      const data = await response.json();
+      const response = await axiosInstance.get('/admin/umpires', {
+        params: { search: searchTerm, page: pageNum, limit: 20 },
+      });
+      const data = response.data;
 
       if (data.status && data.data && data.data.result && Array.isArray(data.data.result)) {
         const newUmpires = data.data.result;

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Bell, Search, Menu, User, Sun, Moon, Maximize, Minimize } from 'lucide-react';
+import { Bell, Search, Menu, User, Sun, Moon, Maximize, Minimize, LogOut } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -19,6 +20,7 @@ const viewTitles: Record<string, string> = {
   tournaments: 'Tournaments',
   venues: 'Venues',
   news: 'News Management',
+  shorts: 'Shorts Management',
   videos: 'Video Management',
   analytics: 'Analytics',
   users: 'User Management',
@@ -31,6 +33,7 @@ const viewTitles: Record<string, string> = {
 
 export function TopBar({ currentView, onMenuClick }: TopBarProps) {
   const { theme, toggleTheme } = useTheme();
+  const { user: authUser, logout } = useAuth();
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const handleThemeToggle = () => {
@@ -117,12 +120,15 @@ export function TopBar({ currentView, onMenuClick }: TopBarProps) {
         {/* User */}
         <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-800">
           <div className="text-right hidden sm:block">
-            <p className="text-sm text-slate-900 dark:text-white">Admin User</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Super Admin</p>
+            <p className="text-sm text-slate-900 dark:text-white">{authUser?.name || 'Admin User'}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">{(authUser?.role || '').replace('_', ' ')}</p>
           </div>
           <div className="size-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
             <User className="size-5 text-white" />
           </div>
+          <Button variant="ghost" size="sm" onClick={logout} title="Sign out" className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+            <LogOut className="size-5" />
+          </Button>
         </div>
       </div>
     </header>

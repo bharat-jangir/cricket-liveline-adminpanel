@@ -107,7 +107,8 @@ export interface FormatSettings {
 export const FORMAT_CONFIG: Record<string, FormatSettings> = {
     'T20': { ballsPerOver: 6, oversPerInning: 20, maxBowlerLimit: 4 },
     'ODI': { ballsPerOver: 6, oversPerInning: 50, maxBowlerLimit: 10 },
-    'Test': { ballsPerOver: 6, oversPerInning: 90, maxBowlerLimit: 0 },
+    'Test': { ballsPerOver: 6, oversPerInning: 0, maxBowlerLimit: 0 }, // unlimited overs
     'T10': { ballsPerOver: 6, oversPerInning: 10, maxBowlerLimit: 2 },
-    'The Hundred': { ballsPerOver: 5, oversPerInning: 20, maxBowlerLimit: 20 },
+    // An "over" is a 5-ball set; 20 sets = 100 balls. maxBowlerLimit is in overs/sets: 4 sets = 20 balls.
+    'The Hundred': { ballsPerOver: 5, oversPerInning: 20, maxBowlerLimit: 4 },
 };
